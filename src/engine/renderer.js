@@ -1,8 +1,9 @@
 export function drawShapes(ctx, camera, shapes, selected) {
   ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
 
   ctx.translate(camera.x * camera.zoom, camera.y * camera.zoom);
-
   ctx.scale(camera.zoom, camera.zoom);
 
   for (const shape of shapes) {

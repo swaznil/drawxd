@@ -7,14 +7,26 @@ export default function App() {
   const canvasRef = useRef(null);
 
   const clearCanvas = () => {
-    if (canvasRef.current) {
-      canvasRef.current.clear();
-    }
+    canvasRef.current?.clear();
+  };
+
+  const undo = () => {
+    canvasRef.current?.undo();
+  };
+
+  const redo = () => {
+    canvasRef.current?.redo();
   };
 
   return (
     <div className="app">
-      <Toolbar tool={tool} setTool={setTool} onClear={clearCanvas} />
+      <Toolbar
+        tool={tool}
+        setTool={setTool}
+        onClear={clearCanvas}
+        onUndo={undo}
+        onRedo={redo}
+      />
 
       <Canvas ref={canvasRef} tool={tool} />
     </div>

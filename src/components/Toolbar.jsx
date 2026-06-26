@@ -8,6 +8,8 @@ import {
   Type,
   Minus,
   Trash2,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 
 const tools = [
@@ -21,7 +23,7 @@ const tools = [
   { key: "text", icon: Type, label: "Text" },
 ];
 
-export default function Toolbar({ tool, setTool, onClear }) {
+export default function Toolbar({ tool, setTool, onClear, onUndo, onRedo }) {
   return (
     <div className="toolbar">
       <div className="toolbar-group">
@@ -42,6 +44,14 @@ export default function Toolbar({ tool, setTool, onClear }) {
       </div>
 
       <div className="toolbar-divider" />
+
+      <button className="tool-btn" onClick={onUndo} title="Undo">
+        <Undo2 size={18} />
+      </button>
+
+      <button className="tool-btn" onClick={onRedo} title="Redo">
+        <Redo2 size={18} />
+      </button>
 
       <button
         className="tool-btn danger"
