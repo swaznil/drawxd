@@ -35,3 +35,73 @@ body {
   background: transparent;
   touch-action: none;
 }
+
+/* toolbar styles */
+
+.toolbar{
+    position:fixed;
+    top:20px;
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px;
+    background:rgba(20,20,20,0.82);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:18px;
+    z-index:9999;
+    box-shadow:
+    0 10px 30px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.toolbar-group{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.toolbar-divider{
+    width:1px;
+    height:28px;
+    background:rgba(255,255,255,0.08);
+}
+
+.tool-btn{
+    width:42px;
+    height:42px;
+    border:none;
+    outline:none;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:12px;
+    background:transparent;
+    color:#d4d4d4;
+    cursor:pointer;
+    transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.tool-btn:hover{
+    background:rgba(255,255,255,0.08);
+    color:white;
+    transform:translateY(-1px);
+}
+
+.tool-btn.active{
+    background:#2563eb;
+    color:white;
+    box-shadow:
+    0 4px 14px rgba(37,99,235,0.45);
+}
+
+.tool-btn.danger:hover{
+    background:#dc2626;
+    color:white;
+}
