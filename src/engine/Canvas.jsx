@@ -243,28 +243,21 @@ const Canvas = forwardRef(({ tool }, ref) => {
     canvas.addEventListener("pointerdown", pointerDown);
 
     window.addEventListener("pointermove", pointerMove);
-
     window.addEventListener("pointerup", pointerUp);
-
     window.addEventListener("keydown", keyDown);
 
     canvas.addEventListener("wheel", wheel, { passive: false });
-
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
     return () => {
       cancelAnimationFrame(animationFrame);
 
       window.removeEventListener("resize", resize);
-
       window.removeEventListener("pointermove", pointerMove);
-
       window.removeEventListener("pointerup", pointerUp);
-
       window.removeEventListener("keydown", keyDown);
 
       canvas.removeEventListener("pointerdown", pointerDown);
-
       canvas.removeEventListener("wheel", wheel);
     };
   }, [tool]);
