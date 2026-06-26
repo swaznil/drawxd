@@ -1,20 +1,37 @@
 * {
   margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
 html,
 body,
-#root,
-.app {
+#root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #111;
+  background: #08101c;
 }
 
-canvas {
-  display: block;
+body {
+  font-family: Inter, Arial, sans-serif;
+  color: #e2e8f0;
+}
+
+.app {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: radial-gradient(circle at top left, #111828 0%, #090b10 40%, #05070c 100%);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  display: block;
+  background: transparent;
+  touch-action: none;
 }
