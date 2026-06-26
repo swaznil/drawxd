@@ -1,10 +1,7 @@
-export function createRect(x,y,width,height){
+export function createShape(type,data){
     return{
-    id:crypto.randomUUID(),
-    type:"rect",
-    x,
-    y,
-    width,
-    height
+        id:crypto.randomUUID(),
+        type,
+        ...data
     }
 }

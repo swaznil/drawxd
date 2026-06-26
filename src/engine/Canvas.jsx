@@ -1,256 +1,275 @@
-// src/engine/Canvas.jsx
-import { useEffect, useRef, useState } from "react"
-import { createCamera } from "./camera"
-import { drawGrid } from "./grid"
-import { drawShapes } from "./renderer"
-import { screenToWorld } from "./utils"
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
-export default function Canvas({ tool, clearSignal }) {
-  const canvasRef = useRef(null)
-  const cameraRef = useRef(createCamera())
-  const shapesRef = useRef([])
-  const currentShapeRef = useRef(null)
-  const selectedIdRef = useRef(null)
-  const [selectedId, setSelectedId] = useState(null)
-  const interactionRef = useRef({ mode: "idle", pointerId: null, startX: 0, startY: 0, shapeStart: null, shape: null })
-  const lastRef = useRef({ x: 0, y: 0 })
+import { createCamera } from "./camera";
+import { drawGrid } from "./grid";
+import { drawShapes } from "./renderer";
+import { screenToWorld } from "./utils";
+
+const Canvas = forwardRef(({ tool }, ref) => {
+  const canvasRef = useRef(null);
+  const cameraRef = useRef(createCamera());
+  const shapesRef = useRef([]);
+  const currentShapeRef = useRef(null);
+  const selectedShapeRef = useRef(null);
+  const drawingRef = useRef(false);
+  const panningRef = useRef(false);
+  const draggingRef = useRef(false);
+  const lastRef = useRef({ x: 0, y: 0 });
+
+  useImperativeHandle(ref, () => ({
+    clear() {
+      shapesRef.current = [];
+      selectedShapeRef.current = null;
+    },
+  }));
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext("2d")
-    const dpr = window.devicePixelRatio || 1
-
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
     const resize = () => {
-      const width = window.innerWidth
-      const height = window.innerHeight
-      canvas.width = Math.floor(width * dpr)
-      canvas.height = Math.floor(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    }
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
 
-    resize()
-    window.addEventListener("resize", resize)
-
-    const getWorldPosition = (x, y) => screenToWorld(x, y, cameraRef.current)
-
-    const findShapeAtPoint = (point) => {
-      for (let i = shapesRef.current.length - 1; i >= 0; i -= 1) {
-        const shape = shapesRef.current[i]
-        if (shape.type === "rect") {
-          const x1 = Math.min(shape.x, shape.x + shape.width)
-          const x2 = Math.max(shape.x, shape.x + shape.width)
-          const y1 = Math.min(shape.y, shape.y + shape.height)
-          const y2 = Math.max(shape.y, shape.y + shape.height)
-          if (point.x >= x1 && point.x <= x2 && point.y >= y1 && point.y <= y2) {
-            return shape
-          }
-        }
-      }
-      return null
-    }
-
-    const clampZoom = (zoom) => Math.min(6, Math.max(0.25, zoom))
-
-    const setSelectedShape = (shape) => {
-      const id = shape ? shape.id : null
-      selectedIdRef.current = id
-      setSelectedId(id)
-    }
-
-    const releaseCapture = () => {
-      const pointerId = interactionRef.current.pointerId
-      if (pointerId !== null) {
-        try {
-          canvas.releasePointerCapture(pointerId)
-        } catch {
-          // no-op
-        }
-      }
-    }
-
-    const cancelInteraction = () => {
-      if (interactionRef.current.mode === "create" && interactionRef.current.shape) {
-        shapesRef.current = shapesRef.current.filter((item) => item.id !== interactionRef.current.shape.id)
-        setSelectedShape(null)
-      }
-      interactionRef.current = { mode: "idle", pointerId: null, startX: 0, startY: 0, shapeStart: null, shape: null }
-      currentShapeRef.current = null
-      lastRef.current = { x: 0, y: 0 }
-      releaseCapture()
-    }
-
-    let animationFrame = 0
+    window.addEventListener("resize", resize);
+    let animationFrame;
     const render = () => {
-      const camera = cameraRef.current
-      const width = window.innerWidth
-      const height = window.innerHeight
-      ctx.clearRect(0, 0, width, height)
-      drawGrid(ctx, camera, width, height)
-      drawShapes(ctx, camera, shapesRef.current, selectedIdRef.current)
-      animationFrame = requestAnimationFrame(render)
-    }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    render()
+      drawGrid(ctx, cameraRef.current, canvas.width, canvas.height);
 
-    const startPan = (event) => {
-      interactionRef.current = { mode: "pan", pointerId: event.pointerId }
-      lastRef.current = { x: event.clientX, y: event.clientY }
-      canvas.setPointerCapture(event.pointerId)
-    }
+      drawShapes(
+        ctx,
+        cameraRef.current,
+        shapesRef.current,
+        selectedShapeRef.current,
+      );
 
-    const startCreate = (event) => {
-      const point = getWorldPosition(event.clientX, event.clientY)
-      const shape = {
-        id: crypto.randomUUID(),
-        type: "rect",
-        x: point.x,
-        y: point.y,
-        width: 0,
-        height: 0,
-      }
-      shapesRef.current.push(shape)
-      currentShapeRef.current = shape
-      interactionRef.current = { mode: "create", pointerId: event.pointerId, startX: point.x, startY: point.y, shape }
-      setSelectedShape(shape)
-      canvas.setPointerCapture(event.pointerId)
-    }
+      animationFrame = requestAnimationFrame(render);
+    };
 
-    const startDrag = (event, shape) => {
-      const point = getWorldPosition(event.clientX, event.clientY)
-      const index = shapesRef.current.findIndex((item) => item.id === shape.id)
-      if (index >= 0 && index !== shapesRef.current.length - 1) {
-        shapesRef.current.splice(index, 1)
-        shapesRef.current.push(shape)
-      }
-      interactionRef.current = {
-        mode: "drag",
-        pointerId: event.pointerId,
-        startX: point.x,
-        startY: point.y,
-        shapeStart: { x: shape.x, y: shape.y },
-        shape,
-      }
-      setSelectedShape(shape)
-      canvas.setPointerCapture(event.pointerId)
-    }
+    render();
 
-    const pointerDown = (event) => {
-      if (event.button === 1 || event.button === 2) {
-        event.preventDefault()
-        startPan(event)
-        return
+    const getShapeAt = (x, y) => {
+      for (let i = shapesRef.current.length - 1; i >= 0; i--) {
+        const s = shapesRef.current[i];
+
+        if (
+          x >= Math.min(s.x, s.x + s.width) &&
+          x <= Math.max(s.x, s.x + s.width) &&
+          y >= Math.min(s.y, s.y + s.height) &&
+          y <= Math.max(s.y, s.y + s.height)
+        ) {
+          return s;
+        }
       }
 
-      if (event.button !== 0) {
-        return
-      }
+      return null;
+    };
 
-      if (tool === "rect") {
-        startCreate(event)
-        return
+    const pointerDown = (e) => {
+      const camera = cameraRef.current;
+
+      const pos = screenToWorld(e.clientX, e.clientY, camera);
+
+      lastRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+      };
+
+      if (tool === "pan" || e.button === 1 || e.button === 2) {
+        panningRef.current = true;
+        return;
       }
 
       if (tool === "select") {
-        const point = getWorldPosition(event.clientX, event.clientY)
-        const hit = findShapeAtPoint(point)
-        if (hit) {
-          startDrag(event, hit)
-          return
+        const shape = getShapeAt(pos.x, pos.y);
+
+        selectedShapeRef.current = shape;
+
+        if (shape) {
+          draggingRef.current = true;
         }
-        setSelectedShape(null)
-      }
-    }
 
-    const pointerMove = (event) => {
-      const camera = cameraRef.current
-      const interaction = interactionRef.current
-
-      if (interaction.mode === "pan") {
-        const dx = (event.clientX - lastRef.current.x) / camera.zoom
-        const dy = (event.clientY - lastRef.current.y) / camera.zoom
-        camera.x += dx
-        camera.y += dy
-        lastRef.current = { x: event.clientX, y: event.clientY }
-        return
+        return;
       }
 
-      if (interaction.mode === "create" && currentShapeRef.current) {
-        const point = getWorldPosition(event.clientX, event.clientY)
-        currentShapeRef.current.width = point.x - currentShapeRef.current.x
-        currentShapeRef.current.height = point.y - currentShapeRef.current.y
-        return
+      if (tool === "eraser") {
+        const shape = getShapeAt(pos.x, pos.y);
+
+        if (shape) {
+          shapesRef.current = shapesRef.current.filter(
+            (s) => s.id !== shape.id,
+          );
+        }
+
+        return;
       }
 
-      if (interaction.mode === "drag" && interaction.shape) {
-        const point = getWorldPosition(event.clientX, event.clientY)
-        interaction.shape.x = interaction.shapeStart.x + (point.x - interaction.startX)
-        interaction.shape.y = interaction.shapeStart.y + (point.y - interaction.startY)
+      drawingRef.current = true;
+
+      if (tool === "rect") {
+        const rect = {
+          id: crypto.randomUUID(),
+          type: "rect",
+          x: pos.x,
+          y: pos.y,
+          width: 0,
+          height: 0,
+        };
+
+        currentShapeRef.current = rect;
+        shapesRef.current.push(rect);
       }
-    }
+
+      if (tool === "ellipse") {
+        const ellipse = {
+          id: crypto.randomUUID(),
+          type: "ellipse",
+          x: pos.x,
+          y: pos.y,
+          width: 0,
+          height: 0,
+        };
+
+        currentShapeRef.current = ellipse;
+        shapesRef.current.push(ellipse);
+      }
+
+      if (tool === "line") {
+        const line = {
+          id: crypto.randomUUID(),
+          type: "line",
+          x: pos.x,
+          y: pos.y,
+          width: 0,
+          height: 0,
+        };
+
+        currentShapeRef.current = line;
+        shapesRef.current.push(line);
+      }
+
+      if (tool === "pencil") {
+        const pencil = {
+          id: crypto.randomUUID(),
+          type: "pencil",
+          points: [pos],
+        };
+        currentShapeRef.current = pencil;
+        shapesRef.current.push(pencil);
+      }
+
+      if (tool === "text") {
+        const text = prompt("Text");
+
+        if (text) {
+          shapesRef.current.push({
+            id: crypto.randomUUID(),
+            type: "text",
+            x: pos.x,
+            y: pos.y,
+            text,
+          });
+        }
+      }
+    };
+
+    const pointerMove = (e) => {
+      const camera = cameraRef.current;
+      const pos = screenToWorld(e.clientX, e.clientY, camera);
+
+      if (panningRef.current) {
+        camera.x += (e.clientX - lastRef.current.x) / camera.zoom;
+
+        camera.y += (e.clientY - lastRef.current.y) / camera.zoom;
+
+        lastRef.current = {
+          x: e.clientX,
+          y: e.clientY,
+        };
+      }
+
+      if (draggingRef.current && selectedShapeRef.current) {
+        selectedShapeRef.current.x = pos.x - selectedShapeRef.current.width / 2;
+
+        selectedShapeRef.current.y =
+          pos.y - selectedShapeRef.current.height / 2;
+      }
+
+      if (drawingRef.current && currentShapeRef.current) {
+        const shape = currentShapeRef.current;
+
+        if (shape.type === "pencil") {
+          shape.points.push(pos);
+        } else {
+          shape.width = pos.x - shape.x;
+          shape.height = pos.y - shape.y;
+        }
+      }
+    };
 
     const pointerUp = () => {
-      const interaction = interactionRef.current
-      if (interaction.mode === "create" && interaction.shape) {
-        const shape = interaction.shape
-        if (Math.abs(shape.width) < 8 || Math.abs(shape.height) < 8) {
-          shapesRef.current = shapesRef.current.filter((item) => item.id !== shape.id)
-          setSelectedShape(null)
-        }
-      }
-      interactionRef.current = { mode: "idle", pointerId: null, startX: 0, startY: 0, shapeStart: null, shape: null }
-      currentShapeRef.current = null
-      releaseCapture()
-    }
+      drawingRef.current = false;
+      panningRef.current = false;
+      draggingRef.current = false;
+      currentShapeRef.current = null;
+    };
 
-    const wheel = (event) => {
-      event.preventDefault()
-      const camera = cameraRef.current
-      const before = getWorldPosition(event.clientX, event.clientY)
-      camera.zoom = clampZoom(camera.zoom * (event.deltaY > 0 ? 0.9 : 1.1))
-      const after = getWorldPosition(event.clientX, event.clientY)
-      camera.x += after.x - before.x
-      camera.y += after.y - before.y
-    }
+    const wheel = (e) => {
+      e.preventDefault();
+      const camera = cameraRef.current;
+      camera.zoom *= e.deltaY > 0 ? 0.9 : 1.1;
 
-    const handleKeyDown = (event) => {
-      if (event.key === "Delete" || event.key === "Backspace") {
-        if (selectedIdRef.current) {
-          shapesRef.current = shapesRef.current.filter((shape) => shape.id !== selectedIdRef.current)
-          setSelectedShape(null)
-        }
+      if (camera.zoom < 0.2) {
+        camera.zoom = 0.2;
       }
 
-      if (event.key === "Escape") {
-        cancelInteraction()
+      if (camera.zoom > 5) {
+        camera.zoom = 5;
       }
-    }
+    };
 
-    window.addEventListener("keydown", handleKeyDown)
-    canvas.addEventListener("pointerdown", pointerDown)
-    window.addEventListener("pointermove", pointerMove)
-    window.addEventListener("pointerup", pointerUp)
-    canvas.addEventListener("wheel", wheel, { passive: false })
-    canvas.addEventListener("contextmenu", (event) => event.preventDefault())
+    const keyDown = (e) => {
+      if (e.key === "Delete" && selectedShapeRef.current) {
+        shapesRef.current = shapesRef.current.filter(
+          (s) => s.id !== selectedShapeRef.current.id,
+        );
+        selectedShapeRef.current = null;
+      }
+    };
+
+    canvas.addEventListener("pointerdown", pointerDown);
+
+    window.addEventListener("pointermove", pointerMove);
+
+    window.addEventListener("pointerup", pointerUp);
+
+    window.addEventListener("keydown", keyDown);
+
+    canvas.addEventListener("wheel", wheel, { passive: false });
+
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
     return () => {
-      cancelAnimationFrame(animationFrame)
-      window.removeEventListener("resize", resize)
-      window.removeEventListener("keydown", handleKeyDown)
-      window.removeEventListener("pointermove", pointerMove)
-      window.removeEventListener("pointerup", pointerUp)
-      canvas.removeEventListener("pointerdown", pointerDown)
-      canvas.removeEventListener("wheel", wheel)
-    }
-  }, [tool, clearSignal])
+      cancelAnimationFrame(animationFrame);
 
-  useEffect(() => {
-    if (clearSignal > 0) {
-      shapesRef.current = []
-      setSelectedShape(null)
-    }
-  }, [clearSignal])
+      window.removeEventListener("resize", resize);
 
-  return <canvas ref={canvasRef} className="canvas" />
-}
+      window.removeEventListener("pointermove", pointerMove);
+
+      window.removeEventListener("pointerup", pointerUp);
+
+      window.removeEventListener("keydown", keyDown);
+
+      canvas.removeEventListener("pointerdown", pointerDown);
+
+      canvas.removeEventListener("wheel", wheel);
+    };
+  }, [tool]);
+
+  return <canvas ref={canvasRef} className="canvas" />;
+});
+
+export default Canvas;
