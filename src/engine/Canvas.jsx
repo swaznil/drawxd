@@ -4,25 +4,38 @@ import { createCamera, panCamera, zoomCamera } from "./camera";
 import { drawGrid } from "./grid";
 import { drawShapes } from "./renderer";
 import { screenToWorld } from "./utils";
-import {createRect, createEllipse, createLine, createPencil, 
-  createText, updateShape, moveShape, getShapeAt,} from "./shapes";
+
+import "./shapes/index";
+
+import { getShape } from "./registry";
 
 const Canvas = forwardRef(({ tool }, ref) => {
   const canvasRef = useRef(null);
+
   const cameraRef = useRef(createCamera());
+
   const shapesRef = useRef([]);
+
   const currentShapeRef = useRef(null);
+
   const selectedShapeRef = useRef(null);
+
   const drawingRef = useRef(false);
+
   const panningRef = useRef(false);
+
   const draggingRef = useRef(false);
+
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+
   const lastRef = useRef({ x: 0, y: 0 });
 
   const historyRef = useRef([]);
+
   const redoRef = useRef([]);
+
   const saveHistory = () => {
-    historyRef.current.push(JSON.parse(JSON.stringify(shapesRef.current)));
+    historyRef.current.push(structuredClone(shapesRef.current));
 
     if (historyRef.current.length > 100) {
       historyRef.current.shift();
@@ -31,17 +44,33 @@ const Canvas = forwardRef(({ tool }, ref) => {
     redoRef.current = [];
   };
 
+  const getShapeAt = (x, y) => {
+    for (let i = shapesRef.current.length - 1; i >= 0; i--) {
+      const shape = shapesRef.current[i];
+
+      const shapeDef = getShape(shape.type);
+
+      if (shapeDef?.hitTest(shape, x, y)) {
+        return shape;
+      }
+    }
+
+    return null;
+  };
+
   useImperativeHandle(ref, () => ({
     clear() {
       saveHistory();
+
       shapesRef.current = [];
+
       selectedShapeRef.current = null;
     },
 
     undo() {
       if (historyRef.current.length === 0) return;
 
-      redoRef.current.push(JSON.parse(JSON.stringify(shapesRef.current)));
+      redoRef.current.push(structuredClone(shapesRef.current));
 
       shapesRef.current = historyRef.current.pop();
     },
@@ -49,7 +78,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
     redo() {
       if (redoRef.current.length === 0) return;
 
-      historyRef.current.push(JSON.parse(JSON.stringify(shapesRef.current)));
+      historyRef.current.push(structuredClone(shapesRef.current));
 
       shapesRef.current = redoRef.current.pop();
     },
@@ -59,6 +88,8 @@ const Canvas = forwardRef(({ tool }, ref) => {
     const canvas = canvasRef.current;
 
     const ctx = canvas.getContext("2d");
+
+    let frame;
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -81,7 +112,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
         selectedShapeRef.current,
       );
 
-      requestAnimationFrame(render);
+      frame = requestAnimationFrame(render);
     };
 
     render();
@@ -96,19 +127,18 @@ const Canvas = forwardRef(({ tool }, ref) => {
         y: e.clientY,
       };
 
+      // PAN
+
       if (tool === "pan" || e.button === 1 || e.button === 2) {
         panningRef.current = true;
 
         return;
       }
 
+      // SELECT
+
       if (tool === "select") {
-        const shape = getShapeAt(
-          shapesRef.current,
-          pos.x,
-          pos.y,
-          cameraRef.current.zoom,
-        );
+        const shape = getShapeAt(pos.x, pos.y);
 
         selectedShapeRef.current = shape;
 
@@ -126,13 +156,10 @@ const Canvas = forwardRef(({ tool }, ref) => {
         return;
       }
 
+      // ERASER
+
       if (tool === "eraser") {
-        const shape = getShapeAt(
-          shapesRef.current,
-          pos.x,
-          pos.y,
-          cameraRef.current.zoom,
-        );
+        const shape = getShapeAt(pos.x, pos.y);
 
         if (shape) {
           saveHistory();
@@ -145,53 +172,29 @@ const Canvas = forwardRef(({ tool }, ref) => {
         return;
       }
 
+      // DRAW
+
+      const shapeDef = getShape(tool);
+
+      if (!shapeDef) return;
+
       drawingRef.current = true;
 
       saveHistory();
 
-      if (tool === "rect") {
-        const rect = createRect(pos.x, pos.y);
+      const shape = shapeDef.create(pos.x, pos.y);
 
-        currentShapeRef.current = rect;
-        shapesRef.current.push(rect);
-      }
+      currentShapeRef.current = shape;
 
-      if (tool === "ellipse") {
-        const ellipse = createEllipse(pos.x, pos.y);
-
-        currentShapeRef.current = ellipse;
-        shapesRef.current.push(ellipse);
-      }
-
-      if (tool === "line") {
-        const line = createLine(pos.x, pos.y);
-
-        currentShapeRef.current = line;
-        shapesRef.current.push(line);
-      }
-
-      if (tool === "pencil") {
-        const pencil = createPencil(pos);
-
-        currentShapeRef.current = pencil;
-        shapesRef.current.push(pencil);
-      }
-
-      if (tool === "text") {
-        drawingRef.current = false;
-
-        const text = prompt("Enter text");
-
-        if (text) {
-          shapesRef.current.push(createText(pos.x, pos.y, text));
-        }
-      }
+      shapesRef.current.push(shape);
     };
 
     const pointerMove = (e) => {
       const camera = cameraRef.current;
 
       const pos = screenToWorld(e.clientX, e.clientY, camera);
+
+      // PAN
 
       if (panningRef.current) {
         panCamera(
@@ -206,17 +209,30 @@ const Canvas = forwardRef(({ tool }, ref) => {
         };
       }
 
+      // DRAG
+
       if (draggingRef.current && selectedShapeRef.current) {
         const shape = selectedShapeRef.current;
+
         const offset = dragOffsetRef.current;
 
-        moveShape(shape, pos, offset);
+        const dx = pos.x - offset.x - shape.x;
+
+        const dy = pos.y - offset.y - shape.y;
+
+        const shapeDef = getShape(shape.type);
+
+        shapeDef?.move(shape, dx, dy);
       }
+
+      // DRAW UPDATE
 
       if (drawingRef.current && currentShapeRef.current) {
         const shape = currentShapeRef.current;
 
-        updateShape(shape, pos);
+        const shapeDef = getShape(shape.type);
+
+        shapeDef?.update(shape, pos);
       }
     };
 
@@ -239,8 +255,13 @@ const Canvas = forwardRef(({ tool }, ref) => {
 
       camera.zoom *= e.deltaY > 0 ? 0.9 : 1.1;
 
-      if (camera.zoom < 0.2) camera.zoom = 0.2;
-      if (camera.zoom > 5) camera.zoom = 5;
+      if (camera.zoom < 0.2) {
+        camera.zoom = 0.2;
+      }
+
+      if (camera.zoom > 5) {
+        camera.zoom = 5;
+      }
 
       const mouseAfterZoom = screenToWorld(e.clientX, e.clientY, camera);
 
@@ -248,6 +269,8 @@ const Canvas = forwardRef(({ tool }, ref) => {
     };
 
     const keyDown = (e) => {
+      // DELETE
+
       if (e.key === "Delete" && selectedShapeRef.current) {
         saveHistory();
 
@@ -257,6 +280,8 @@ const Canvas = forwardRef(({ tool }, ref) => {
 
         selectedShapeRef.current = null;
       }
+
+      // UNDO REDO
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -272,19 +297,28 @@ const Canvas = forwardRef(({ tool }, ref) => {
     canvas.addEventListener("pointerdown", pointerDown);
 
     window.addEventListener("pointermove", pointerMove);
+
     window.addEventListener("pointerup", pointerUp);
+
     window.addEventListener("keydown", keyDown);
 
     canvas.addEventListener("wheel", wheel, { passive: false });
+
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
     return () => {
+      cancelAnimationFrame(frame);
+
       window.removeEventListener("resize", resize);
+
       window.removeEventListener("pointermove", pointerMove);
+
       window.removeEventListener("pointerup", pointerUp);
+
       window.removeEventListener("keydown", keyDown);
 
       canvas.removeEventListener("pointerdown", pointerDown);
+
       canvas.removeEventListener("wheel", wheel);
     };
   }, [tool, ref]);

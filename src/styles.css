@@ -105,3 +105,13 @@ body {
     background:#dc2626;
     color:white;
 }
+
+.shape-panel{
+  position:fixed;
+  left:20px;
+  top:100px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  z-index:9999;
+}

@@ -15,16 +15,26 @@ drawxd
 ├── src
 │   ├── App.jsx
 │   ├── components
+│   │   ├── ShapePanel.jsx
 │   │   └── Toolbar.jsx
 │   ├── engine
 │   │   ├── Canvas.jsx
 │   │   ├── camera.js
 │   │   ├── grid.js
 │   │   ├── input.js
+│   │   ├── registry.js
 │   │   ├── renderer.js
-│   │   ├── shapes.js
+│   │   ├── shapes
+│   │   │   ├── arrow.js
+│   │   │   ├── diamond.js
+│   │   │   ├── ellipse.js
+│   │   │   ├── heart.js
+│   │   │   ├── hexagon.js
+│   │   │   ├── index.js
+│   │   │   ├── rect.js
+│   │   │   └── star.js
 │   │   └── utils.js
-│   ├── main.js
+│   ├── main.jsx
 │   └── styles.css
 └── vite.config.js
 ```

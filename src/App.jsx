@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import Toolbar from "./components/Toolbar";
 import Canvas from "./engine/Canvas";
+import ShapePanel from "./components/ShapePanel";
 
 export default function App() {
   const [tool, setTool] = useState("select");
@@ -26,6 +27,11 @@ export default function App() {
         onClear={clearCanvas}
         onUndo={undo}
         onRedo={redo}
+      />
+
+      <ShapePanel
+        tool={tool}
+        setTool={setTool}
       />
 
       <Canvas ref={canvasRef} tool={tool} />
