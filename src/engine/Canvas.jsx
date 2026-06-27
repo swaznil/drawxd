@@ -1,9 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
-import { createCamera } from "./camera";
+import { createCamera, panCamera, zoomCamera } from "./camera";
 import { drawGrid } from "./grid";
 import { drawShapes } from "./renderer";
 import { screenToWorld } from "./utils";
+import {createRect, createEllipse, createLine, createPencil, 
+  createText, updateShape, moveShape, getShapeAt,} from "./shapes";
 
 const Canvas = forwardRef(({ tool }, ref) => {
   const canvasRef = useRef(null);
@@ -14,8 +16,8 @@ const Canvas = forwardRef(({ tool }, ref) => {
   const drawingRef = useRef(false);
   const panningRef = useRef(false);
   const draggingRef = useRef(false);
-  const dragOffsetRef = useRef({x: 0,y: 0,});
-  const lastRef = useRef({ x: 0, y: 0,});
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const lastRef = useRef({ x: 0, y: 0 });
 
   const historyRef = useRef([]);
   const redoRef = useRef([]);
@@ -67,101 +69,6 @@ const Canvas = forwardRef(({ tool }, ref) => {
 
     window.addEventListener("resize", resize);
 
-    const distanceToLine = (x1, y1, x2, y2, px, py) => {
-      const A = px - x1;
-      const B = py - y1;
-      const C = x2 - x1;
-      const D = y2 - y1;
-
-      const dot = A * C + B * D;
-
-      const lenSq = C * C + D * D;
-
-      let param = -1;
-
-      if (lenSq !== 0) {
-        param = dot / lenSq;
-      }
-
-      let xx;
-      let yy;
-
-      if (param < 0) {
-        xx = x1;
-        yy = y1;
-      } else if (param > 1) {
-        xx = x2;
-        yy = y2;
-      } else {
-        xx = x1 + param * C;
-        yy = y1 + param * D;
-      }
-
-      const dx = px - xx;
-      const dy = py - yy;
-
-      return Math.sqrt(dx * dx + dy * dy);
-    };
-
-    const getShapeAt = (x, y) => {
-      for (let i = shapesRef.current.length - 1; i >= 0; i--) {
-        const s = shapesRef.current[i];
-
-        if (s.type === "rect" || s.type === "ellipse") {
-          if (
-            x >= Math.min(s.x, s.x + s.width) &&
-            x <= Math.max(s.x, s.x + s.width) &&
-            y >= Math.min(s.y, s.y + s.height) &&
-            y <= Math.max(s.y, s.y + s.height)
-          ) {
-            return s;
-          }
-        }
-
-        if (s.type === "line") {
-          const dist = distanceToLine(
-            s.x,
-            s.y,
-            s.x + s.width,
-            s.y + s.height,
-            x,
-            y,
-          );
-
-          if (dist < 8 / cameraRef.current.zoom) {
-            return s;
-          }
-        }
-
-        if (s.type === "pencil") {
-          for (let p = 0; p < s.points.length - 1; p++) {
-            const a = s.points[p];
-
-            const b = s.points[p + 1];
-
-            const dist = distanceToLine(a.x, a.y, b.x, b.y, x, y);
-
-            if (dist < 8 / cameraRef.current.zoom) {
-              return s;
-            }
-          }
-        }
-
-        if (s.type === "text") {
-          if (
-            x >= s.x &&
-            x <= s.x + s.width &&
-            y >= s.y - s.height &&
-            y <= s.y
-          ) {
-            return s;
-          }
-        }
-      }
-
-      return null;
-    };
-
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -196,7 +103,12 @@ const Canvas = forwardRef(({ tool }, ref) => {
       }
 
       if (tool === "select") {
-        const shape = getShapeAt(pos.x, pos.y);
+        const shape = getShapeAt(
+          shapesRef.current,
+          pos.x,
+          pos.y,
+          cameraRef.current.zoom,
+        );
 
         selectedShapeRef.current = shape;
 
@@ -215,7 +127,12 @@ const Canvas = forwardRef(({ tool }, ref) => {
       }
 
       if (tool === "eraser") {
-        const shape = getShapeAt(pos.x, pos.y);
+        const shape = getShapeAt(
+          shapesRef.current,
+          pos.x,
+          pos.y,
+          cameraRef.current.zoom,
+        );
 
         if (shape) {
           saveHistory();
@@ -233,59 +150,30 @@ const Canvas = forwardRef(({ tool }, ref) => {
       saveHistory();
 
       if (tool === "rect") {
-        const rect = {
-          id: crypto.randomUUID(),
-          type: "rect",
-          x: pos.x,
-          y: pos.y,
-          width: 0,
-          height: 0,
-        };
+        const rect = createRect(pos.x, pos.y);
 
         currentShapeRef.current = rect;
-
         shapesRef.current.push(rect);
       }
 
       if (tool === "ellipse") {
-        const ellipse = {
-          id: crypto.randomUUID(),
-          type: "ellipse",
-          x: pos.x,
-          y: pos.y,
-          width: 0,
-          height: 0,
-        };
+        const ellipse = createEllipse(pos.x, pos.y);
 
         currentShapeRef.current = ellipse;
-
         shapesRef.current.push(ellipse);
       }
 
       if (tool === "line") {
-        const line = {
-          id: crypto.randomUUID(),
-          type: "line",
-          x: pos.x,
-          y: pos.y,
-          width: 0,
-          height: 0,
-        };
+        const line = createLine(pos.x, pos.y);
 
         currentShapeRef.current = line;
-
         shapesRef.current.push(line);
       }
 
       if (tool === "pencil") {
-        const pencil = {
-          id: crypto.randomUUID(),
-          type: "pencil",
-          points: [pos],
-        };
+        const pencil = createPencil(pos);
 
         currentShapeRef.current = pencil;
-
         shapesRef.current.push(pencil);
       }
 
@@ -295,15 +183,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
         const text = prompt("Enter text");
 
         if (text) {
-          shapesRef.current.push({
-            id: crypto.randomUUID(),
-            type: "text",
-            x: pos.x,
-            y: pos.y,
-            text,
-            width: text.length * 9,
-            height: 20,
-          });
+          shapesRef.current.push(createText(pos.x, pos.y, text));
         }
       }
     };
@@ -314,9 +194,11 @@ const Canvas = forwardRef(({ tool }, ref) => {
       const pos = screenToWorld(e.clientX, e.clientY, camera);
 
       if (panningRef.current) {
-        camera.x += (e.clientX - lastRef.current.x) / camera.zoom;
-
-        camera.y += (e.clientY - lastRef.current.y) / camera.zoom;
+        panCamera(
+          camera,
+          e.clientX - lastRef.current.x,
+          e.clientY - lastRef.current.y,
+        );
 
         lastRef.current = {
           x: e.clientX,
@@ -326,33 +208,15 @@ const Canvas = forwardRef(({ tool }, ref) => {
 
       if (draggingRef.current && selectedShapeRef.current) {
         const shape = selectedShapeRef.current;
-
         const offset = dragOffsetRef.current;
 
-        if (shape.type === "pencil") {
-          const first = shape.points[0];
-          const dx = pos.x - offset.x - first.x;
-          const dy = pos.y - offset.y - first.y;
-
-          shape.points = shape.points.map((p) => ({
-            x: p.x + dx,
-            y: p.y + dy,
-          }));
-        } else {
-          shape.x = pos.x - offset.x;
-          shape.y = pos.y - offset.y;
-        }
+        moveShape(shape, pos, offset);
       }
 
       if (drawingRef.current && currentShapeRef.current) {
         const shape = currentShapeRef.current;
 
-        if (shape.type === "pencil") {
-          shape.points.push(pos);
-        } else {
-          shape.width = pos.x - shape.x;
-          shape.height = pos.y - shape.y;
-        }
+        updateShape(shape, pos);
       }
     };
 
@@ -373,20 +237,14 @@ const Canvas = forwardRef(({ tool }, ref) => {
 
       const mouseBeforeZoom = screenToWorld(e.clientX, e.clientY, camera);
 
-      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      camera.zoom *= e.deltaY > 0 ? 0.9 : 1.1;
 
-      camera.zoom *= zoomFactor;
+      if (camera.zoom < 0.2) camera.zoom = 0.2;
+      if (camera.zoom > 5) camera.zoom = 5;
 
-      if (camera.zoom < 0.2) {
-        camera.zoom = 0.2;
-      }
-
-      if (camera.zoom > 5) {
-        camera.zoom = 5;
-      }
       const mouseAfterZoom = screenToWorld(e.clientX, e.clientY, camera);
-      camera.x += mouseAfterZoom.x - mouseBeforeZoom.x;
-      camera.y += mouseAfterZoom.y - mouseBeforeZoom.y;
+
+      zoomCamera(camera, mouseBeforeZoom, mouseAfterZoom);
     };
 
     const keyDown = (e) => {
