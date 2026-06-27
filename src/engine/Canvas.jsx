@@ -10,6 +10,7 @@ import { createCamera, panCamera, zoomCamera } from "./camera";
 import { drawGrid } from "./grid";
 import { drawShapes } from "./renderer";
 import { screenToWorld } from "./utils";
+import { HANDLE_SIZE, TOOL_SHORTCUTS, ZOOM_MIN, ZOOM_MAX } from "./constants";
 
 import "./shapes/index";
 import { getShape } from "./registry";
@@ -22,15 +23,70 @@ import {
   resizeShape,
 } from "./shapeUtils";
 
-const HANDLE_SIZE = 10;
+function exportShapesAsPng(shapes, width, height, bgColor) {
+  const bounds = getSelectionBounds(shapes);
 
-const Canvas = forwardRef(({ tool }, ref) => {
+  const padding = 40;
+
+  const srcWidth = bounds ? bounds.width + padding * 2 : width;
+  const srcHeight = bounds ? bounds.height + padding * 2 : height;
+
+  const offsetX = bounds ? -bounds.x + padding : 0;
+  const offsetY = bounds ? -bounds.y + padding : 0;
+
+  const canvas = document.createElement("canvas");
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+
+  if (bgColor) {
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  const scale = Math.min(width / srcWidth, height / srcHeight);
+
+  ctx.translate(
+    (width - srcWidth * scale) / 2,
+    (height - srcHeight * scale) / 2,
+  );
+
+  ctx.scale(scale, scale);
+  ctx.translate(offsetX, offsetY);
+
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  for (const shape of shapes) {
+    const shapeDef = getShape(shape.type);
+
+    if (!shapeDef) {
+      continue;
+    }
+
+    ctx.strokeStyle = shape.stroke || "#e5e7eb";
+    ctx.fillStyle = shape.fill || "transparent";
+    ctx.lineWidth = shape.strokeWidth || 2;
+
+    shapeDef.render(ctx, shape);
+  }
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/png");
+  });
+}
+
+const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
   const canvasRef = useRef(null);
 
   const cameraRef = useRef(createCamera());
+  const toolRef = useRef(tool);
 
   const shapesRef = useRef([]);
   const selectedRef = useRef([]);
+  const clipboardRef = useRef([]);
 
   const currentShapeRef = useRef(null);
 
@@ -42,6 +98,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
   const selectionBoxRef = useRef(null);
   const resizeHandleRef = useRef(null);
   const eraserTrailRef = useRef([]);
+  const lastZoomLabelRef = useRef("100%");
 
   const lastWorldRef = useRef({
     x: 0,
@@ -52,6 +109,8 @@ const Canvas = forwardRef(({ tool }, ref) => {
   const redoRef = useRef([]);
   const [textEditor, setTextEditor] = useState(null);
   const textInputRef = useRef(null);
+
+  toolRef.current = tool;
 
   const saveHistory = () => {
     historyRef.current.push(structuredClone(shapesRef.current));
@@ -107,12 +166,39 @@ const Canvas = forwardRef(({ tool }, ref) => {
     return null;
   };
 
+  const clearCanvas = () => {
+    saveHistory();
+
+    shapesRef.current = [];
+    selectedRef.current = [];
+  };
+
+  const copySelected = () => {
+    if (!selectedRef.current.length) return;
+
+    clipboardRef.current = structuredClone(selectedRef.current);
+  };
+
+  const pasteClipboard = () => {
+    if (!clipboardRef.current.length) return;
+
+    saveHistory();
+
+    const pasted = clipboardRef.current.map((shape) => ({
+      ...structuredClone(shape),
+      id: crypto.randomUUID(),
+    }));
+
+    pasted.forEach((shape) => moveShape(shape, 24, 24));
+
+    shapesRef.current = [...shapesRef.current, ...pasted];
+    selectedRef.current = pasted;
+    clipboardRef.current = structuredClone(pasted);
+  };
+
   useImperativeHandle(ref, () => ({
     clear() {
-      saveHistory();
-
-      shapesRef.current = [];
-      selectedRef.current = [];
+      clearCanvas();
     },
 
     undo() {
@@ -133,6 +219,24 @@ const Canvas = forwardRef(({ tool }, ref) => {
       shapesRef.current = redoRef.current.pop();
 
       selectedRef.current = [];
+    },
+
+    async exportPng(width, height, transparent) {
+      const blob = await exportShapesAsPng(
+        shapesRef.current,
+        width,
+        height,
+        transparent ? null : bgColor,
+      );
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+
+      a.href = url;
+      a.download = "drawing.png";
+      a.click();
+
+      URL.revokeObjectURL(url);
     },
   }));
 
@@ -155,7 +259,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      drawGrid(ctx, cameraRef.current, canvas.width, canvas.height);
+      drawGrid(ctx, cameraRef.current, canvas.width, canvas.height, bgColor);
 
       drawShapes(
         ctx,
@@ -166,6 +270,13 @@ const Canvas = forwardRef(({ tool }, ref) => {
         eraserTrailRef.current,
       );
 
+      const zoomLabel = `${Math.round(cameraRef.current.zoom * 100)}%`;
+
+      if (zoomLabel !== lastZoomLabelRef.current) {
+        lastZoomLabelRef.current = zoomLabel;
+        onZoomChange?.(zoomLabel);
+      }
+
       frame = requestAnimationFrame(render);
     };
 
@@ -173,17 +284,18 @@ const Canvas = forwardRef(({ tool }, ref) => {
 
     const pointerDown = (e) => {
       const camera = cameraRef.current;
+      const currentTool = toolRef.current;
 
       const pos = screenToWorld(e.clientX, e.clientY, camera);
 
       lastWorldRef.current = pos;
 
-      if (tool === "pan" || e.button === 1 || e.button === 2) {
+      if (currentTool === "pan" || e.button === 1 || e.button === 2) {
         panningRef.current = true;
         return;
       }
 
-      if (tool === "eraser") {
+      if (currentTool === "eraser") {
         saveHistory();
 
         erasingRef.current = true;
@@ -193,7 +305,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
         return;
       }
 
-      if (tool === "select") {
+      if (currentTool === "select") {
         const handle = getHandleAt(pos.x, pos.y);
 
         if (handle) {
@@ -247,7 +359,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
         return;
       }
 
-      if (tool === "text") {
+      if (currentTool === "text") {
         setTextEditor({
           screenX: e.clientX,
           screenY: e.clientY,
@@ -267,7 +379,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
         return;
       }
 
-      const shapeDef = getShape(tool);
+      const shapeDef = getShape(currentTool);
 
       if (!shapeDef) return;
 
@@ -368,7 +480,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
 
       camera.zoom *= e.deltaY > 0 ? 0.98 : 1.02;
 
-      camera.zoom = Math.max(0.2, Math.min(5, camera.zoom));
+      camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, camera.zoom));
 
       const after = screenToWorld(e.clientX, e.clientY, camera);
 
@@ -376,7 +488,18 @@ const Canvas = forwardRef(({ tool }, ref) => {
     };
 
     const keyDown = (e) => {
-      if (e.key === "Delete") {
+      const target = e.target;
+
+      if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+        return;
+      }
+
+      if (TOOL_SHORTCUTS[e.key] && !e.ctrlKey && !e.metaKey) {
+        setTool(TOOL_SHORTCUTS[e.key]);
+        return;
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
         if (!selectedRef.current.length) {
           return;
         }
@@ -396,6 +519,20 @@ const Canvas = forwardRef(({ tool }, ref) => {
         selectedRef.current = [...shapesRef.current];
       }
 
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        copySelected();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+        pasteClipboard();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "x") {
+        e.preventDefault();
+
+        clearCanvas();
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
 
@@ -404,6 +541,12 @@ const Canvas = forwardRef(({ tool }, ref) => {
         } else {
           ref.current?.undo();
         }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+
+        ref.current?.redo();
       }
     };
 
@@ -434,7 +577,7 @@ const Canvas = forwardRef(({ tool }, ref) => {
 
       canvas.removeEventListener("wheel", wheel);
     };
-  }, [tool, ref]);
+  }, [ref, setTool, bgColor, onZoomChange]);
 
   return (
     <>

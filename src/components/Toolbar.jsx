@@ -20,36 +20,42 @@ const baseTools = [
     key: "select",
     icon: MousePointer2,
     label: "Pointer",
+    shortcut: "1",
   },
 
   {
     key: "pan",
     icon: Hand,
     label: "Pan",
+    shortcut: "2",
   },
 
   {
     key: "pencil",
     icon: Pencil,
     label: "Pencil",
+    shortcut: "3",
   },
 
   {
     key: "line",
     icon: Minus,
     label: "Line",
+    shortcut: "4",
   },
 
   {
     key: "eraser",
     icon: Eraser,
     label: "Eraser",
+    shortcut: "5",
   },
 
   {
     key: "text",
     icon: Type,
     label: "Text",
+    shortcut: "6",
   },
 ];
 
@@ -95,7 +101,7 @@ export default function Toolbar({
               onClick={() =>
                 setTool(item.key)
               }
-              title={item.label}
+              title={`${item.label} (${item.shortcut})`}
             >
               <Icon size={18} />
             </button>
@@ -161,6 +167,7 @@ export default function Toolbar({
       <button
         className="tool-btn"
         onClick={onUndo}
+        title="Undo (Ctrl Z)"
       >
         <Undo2 size={18} />
       </button>
@@ -168,6 +175,7 @@ export default function Toolbar({
       <button
         className="tool-btn"
         onClick={onRedo}
+        title="Redo (Ctrl Y)"
       >
         <Redo2 size={18} />
       </button>
@@ -175,6 +183,7 @@ export default function Toolbar({
       <button
         className="tool-btn danger"
         onClick={onClear}
+        title="Clear canvas (Ctrl Shift X)"
       >
         <Trash2 size={18} />
       </button>
