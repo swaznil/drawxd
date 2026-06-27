@@ -8,6 +8,10 @@ import heart from "./heart";
 import arrow from "./arrow";
 import star from "./star";
 
+import line from "./line";
+import pencil from "./pencil";
+import text from "./text";
+
 [
   rect,
   diamond,
@@ -16,4 +20,7 @@ import star from "./star";
   heart,
   arrow,
   star,
+  line,
+  pencil,
+  text,
 ].forEach(registerShape);

@@ -6,7 +6,6 @@ import { drawShapes } from "./renderer";
 import { screenToWorld } from "./utils";
 
 import "./shapes/index";
-
 import { getShape } from "./registry";
 
 const Canvas = forwardRef(({ tool }, ref) => {

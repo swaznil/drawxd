@@ -31,6 +31,7 @@ export default {
     const y1 = shape.y;
 
     const x2 = shape.x + shape.width;
+
     const y2 = shape.y + shape.height;
 
     ctx.beginPath();
@@ -43,7 +44,7 @@ export default {
 
     const angle = Math.atan2(y2 - y1, x2 - x1);
 
-    const size = 15;
+    const size = 14;
 
     ctx.beginPath();
 
@@ -51,25 +52,21 @@ export default {
 
     ctx.lineTo(
       x2 - size * Math.cos(angle - Math.PI / 6),
+
       y2 - size * Math.sin(angle - Math.PI / 6),
     );
+    ctx.moveTo(x2, y2);
 
     ctx.lineTo(
       x2 - size * Math.cos(angle + Math.PI / 6),
+
       y2 - size * Math.sin(angle + Math.PI / 6),
     );
 
-    ctx.closePath();
-
-    ctx.fill();
+    ctx.stroke();
   },
 
-  hitTest(shape, x, y) {
-    return (
-      x >= Math.min(shape.x, shape.x + shape.width) &&
-      x <= Math.max(shape.x, shape.x + shape.width) &&
-      y >= Math.min(shape.y, shape.y + shape.height) &&
-      y <= Math.max(shape.y, shape.y + shape.height)
-    );
+  hitTest() {
+    return false;
   },
 };

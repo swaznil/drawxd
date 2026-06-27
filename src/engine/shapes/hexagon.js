@@ -32,17 +32,17 @@ export default {
 
     ctx.beginPath();
 
-    ctx.moveTo(shape.x + w * 0.25, shape.y);
+    ctx.moveTo(shape.x + w * 0.5, shape.y);
 
-    ctx.lineTo(shape.x + w * 0.75, shape.y);
+    ctx.lineTo(shape.x + w, shape.y + h * 0.25);
 
-    ctx.lineTo(shape.x + w, shape.y + h * 0.5);
+    ctx.lineTo(shape.x + w, shape.y + h * 0.75);
 
-    ctx.lineTo(shape.x + w * 0.75, shape.y + h);
+    ctx.lineTo(shape.x + w * 0.5, shape.y + h);
 
-    ctx.lineTo(shape.x + w * 0.25, shape.y + h);
+    ctx.lineTo(shape.x, shape.y + h * 0.75);
 
-    ctx.lineTo(shape.x, shape.y + h * 0.5);
+    ctx.lineTo(shape.x, shape.y + h * 0.25);
 
     ctx.closePath();
 

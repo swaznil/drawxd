@@ -4,6 +4,7 @@ import {
   MousePointer2,
   Hand,
   Pencil,
+  Minus,
   Eraser,
   Type,
   Trash2,
@@ -34,6 +35,12 @@ const baseTools = [
   },
 
   {
+    key: "line",
+    icon: Minus,
+    label: "Line",
+  },
+
+  {
     key: "eraser",
     icon: Eraser,
     label: "Eraser",
@@ -55,7 +62,14 @@ export default function Toolbar({
 }) {
   const [open, setOpen] = useState(false);
 
-  const shapes = getAllShapes();
+  const shapes = getAllShapes().filter(
+    (shape) =>
+      ![
+        "pencil",
+        "text",
+        "line",
+      ].includes(shape.type),
+  );
 
   const mainShape =
     shapes.find((s) => s.type === tool) ||
