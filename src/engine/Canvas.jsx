@@ -360,6 +360,8 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
       }
 
       if (currentTool === "text") {
+        e.preventDefault(); 
+
         setTextEditor({
           screenX: e.clientX,
           screenY: e.clientY,
@@ -367,14 +369,13 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
           worldY: pos.y,
         });
 
-        requestAnimationFrame(() => {
-          textInputRef.current?.focus();
-
+        setTimeout(() => {
           if (textInputRef.current) {
+            textInputRef.current.focus();
             textInputRef.current.selectionStart = 0;
             textInputRef.current.selectionEnd = 0;
           }
-        });
+        }, 0);
 
         return;
       }
@@ -605,13 +606,17 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
             if (e.key === "Escape") {
               setTextEditor(null);
             }
+
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              e.target.blur(); 
+            }
           }}
           onBlur={(e) => {
             const value = e.target.value.trim();
 
             if (value) {
               saveHistory();
-
               const shape = getShape("text").create(
                 textEditor.worldX,
                 textEditor.worldY,
@@ -623,7 +628,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
               shapesRef.current.push(shape);
             }
 
-            setTextEditor(null);
+            setTextEditor((prev) => (prev === textEditor ? null : prev));
           }}
         />
       ) : null}
