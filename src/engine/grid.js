@@ -1,15 +1,15 @@
-export function drawGrid(ctx, camera, width, height) {
-  const size = 50;
+import { GRID_SIZE } from "./constants";
 
+export function drawGrid(ctx, camera, width, height, bgColor) {
   ctx.save();
 
-  ctx.fillStyle = "#111";
+  ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, width, height);
 
-  ctx.strokeStyle = "#1f1f1f";
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
   ctx.lineWidth = 1;
 
-  const scaled = size * camera.zoom;
+  const scaled = GRID_SIZE * camera.zoom;
 
   const offsetX = (camera.x * camera.zoom) % scaled;
   const offsetY = (camera.y * camera.zoom) % scaled;
