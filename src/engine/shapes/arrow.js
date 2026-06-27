@@ -1,4 +1,5 @@
 import { ArrowRight } from "lucide-react";
+import { distanceToLine } from "../shapeUtils";
 
 export default {
   type: "arrow",
@@ -21,52 +22,48 @@ export default {
     shape.height = pos.y - shape.y;
   },
 
-  move(shape, dx, dy) {
-    shape.x += dx;
-    shape.y += dy;
-  },
-
   render(ctx, shape) {
     const x1 = shape.x;
     const y1 = shape.y;
 
     const x2 = shape.x + shape.width;
-
     const y2 = shape.y + shape.height;
 
     ctx.beginPath();
-
     ctx.moveTo(x1, y1);
-
     ctx.lineTo(x2, y2);
-
     ctx.stroke();
-
     const angle = Math.atan2(y2 - y1, x2 - x1);
-
     const size = 14;
 
     ctx.beginPath();
-
     ctx.moveTo(x2, y2);
 
     ctx.lineTo(
       x2 - size * Math.cos(angle - Math.PI / 6),
-
       y2 - size * Math.sin(angle - Math.PI / 6),
     );
+    
     ctx.moveTo(x2, y2);
 
     ctx.lineTo(
       x2 - size * Math.cos(angle + Math.PI / 6),
-
       y2 - size * Math.sin(angle + Math.PI / 6),
     );
 
     ctx.stroke();
   },
 
-  hitTest() {
-    return false;
+  hitTest(shape, x, y) {
+    return (
+      distanceToLine(
+        shape.x,
+        shape.y,
+        shape.x + shape.width,
+        shape.y + shape.height,
+        x,
+        y,
+      ) < 8
+    );
   },
 };

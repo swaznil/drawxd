@@ -1,4 +1,5 @@
 import { Pencil } from "lucide-react";
+import { distanceToLine } from "../shapeUtils";
 
 export default {
   type: "pencil",
@@ -14,17 +15,22 @@ export default {
   },
 
   update(shape, pos) {
+    const last = shape.points[shape.points.length - 1];
+    const dx = pos.x - last.x;
+    const dy = pos.y - last.y;
+
+    if (dx * dx + dy * dy < 4) {
+      return;
+    }
+
     shape.points.push(pos);
   },
 
-  move(shape, dx, dy) {
-    shape.points = shape.points.map((p) => ({
-      x: p.x + dx,
-      y: p.y + dy,
-    }));
-  },
-
   render(ctx, shape) {
+    if (shape.points.length < 2) {
+      return;
+    }
+
     ctx.beginPath();
 
     shape.points.forEach((p, index) => {
@@ -38,7 +44,16 @@ export default {
     ctx.stroke();
   },
 
-  hitTest() {
+  hitTest(shape, x, y) {
+    for (let i = 0; i < shape.points.length - 1; i++) {
+      const a = shape.points[i];
+      const b = shape.points[i + 1];
+
+      if (distanceToLine(a.x, a.y, b.x, b.y, x, y) < 8) {
+        return true;
+      }
+    }
+
     return false;
   },
 };

@@ -1,4 +1,5 @@
 import { Minus } from "lucide-react";
+import { distanceToLine } from "../shapeUtils";
 
 export default {
   type: "line",
@@ -21,11 +22,6 @@ export default {
     shape.height = pos.y - shape.y;
   },
 
-  move(shape, dx, dy) {
-    shape.x += dx;
-    shape.y += dy;
-  },
-
   render(ctx, shape) {
     ctx.beginPath();
     ctx.moveTo(shape.x, shape.y);
@@ -33,7 +29,16 @@ export default {
     ctx.stroke();
   },
 
-  hitTest() {
-    return false;
+  hitTest(shape, x, y) {
+    return (
+      distanceToLine(
+        shape.x,
+        shape.y,
+        shape.x + shape.width,
+        shape.y + shape.height,
+        x,
+        y,
+      ) < 8
+    );
   },
 };
