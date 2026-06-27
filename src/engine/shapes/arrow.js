@@ -1,7 +1,9 @@
+import { ArrowRight } from "lucide-react";
+
 export default {
   type: "arrow",
-
   label: "Arrow",
+  icon: ArrowRight,
 
   create(x, y) {
     return {

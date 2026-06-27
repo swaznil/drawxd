@@ -1,7 +1,9 @@
+import { Diamond } from "lucide-react";
+
 export default {
   type: "diamond",
-
   label: "Diamond",
+  icon: Diamond,
 
   create(x, y) {
     return {

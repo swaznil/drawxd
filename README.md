@@ -15,7 +15,6 @@ drawxd
 ├── src
 │   ├── App.jsx
 │   ├── components
-│   │   ├── ShapePanel.jsx
 │   │   └── Toolbar.jsx
 │   ├── engine
 │   │   ├── Canvas.jsx

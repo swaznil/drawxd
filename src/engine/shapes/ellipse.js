@@ -1,7 +1,9 @@
+import { Circle } from "lucide-react";
+
 export default {
   type: "ellipse",
-
   label: "Ellipse",
+  icon: Circle,
 
   create(x, y) {
     return {

@@ -5,8 +5,6 @@ export default {
   label: "Rectangle",
   icon: Square,
 
-  
-
   create(x, y) {
     return {
       id: crypto.randomUUID(),
