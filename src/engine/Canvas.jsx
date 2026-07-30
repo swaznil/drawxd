@@ -23,7 +23,18 @@ import {
   resizeShape,
 } from "./shapeUtils";
 
-function exportShapesAsPng(shapes, width, height, bgColor) {
+function getCanvasInkColor(bgColor) {
+  const hex = bgColor.replace("#", "");
+  const value = Number.parseInt(hex, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+
+  return luminance > 0.55 ? "#1c1917" : "#f5f5f4";
+}
+
+function exportShapesAsPng(shapes, width, height, bgColor, defaultStroke) {
   const bounds = getSelectionBounds(shapes);
 
   const padding = 40;
@@ -66,7 +77,7 @@ function exportShapesAsPng(shapes, width, height, bgColor) {
       continue;
     }
 
-    ctx.strokeStyle = shape.stroke || "#e5e7eb";
+    ctx.strokeStyle = shape.stroke || defaultStroke;
     ctx.fillStyle = shape.fill || "transparent";
     ctx.lineWidth = shape.strokeWidth || 2;
 
@@ -227,6 +238,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
         width,
         height,
         transparent ? null : bgColor,
+        getCanvasInkColor(bgColor),
       );
 
       const url = URL.createObjectURL(blob);
@@ -268,6 +280,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
         selectedRef.current,
         selectionBoxRef.current,
         eraserTrailRef.current,
+        getCanvasInkColor(bgColor),
       );
 
       const zoomLabel = `${Math.round(cameraRef.current.zoom * 100)}%`;
@@ -360,7 +373,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
       }
 
       if (currentTool === "text") {
-        e.preventDefault(); 
+        e.preventDefault();
 
         setTextEditor({
           screenX: e.clientX,
@@ -397,11 +410,9 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
 
     const pointerMove = (e) => {
       const camera = cameraRef.current;
-
       const pos = screenToWorld(e.clientX, e.clientY, camera);
 
       const dx = pos.x - lastWorldRef.current.x;
-
       const dy = pos.y - lastWorldRef.current.y;
 
       lastWorldRef.current = pos;
@@ -458,9 +469,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
       resizingRef.current = false;
 
       currentShapeRef.current = null;
-
       resizeHandleRef.current = null;
-
       selectionBoxRef.current = null;
 
       eraserTrailRef.current = [];
@@ -480,7 +489,6 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
       const before = screenToWorld(e.clientX, e.clientY, camera);
 
       camera.zoom *= e.deltaY > 0 ? 0.98 : 1.02;
-
       camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, camera.zoom));
 
       const after = screenToWorld(e.clientX, e.clientY, camera);
@@ -528,7 +536,11 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
         pasteClipboard();
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "x") {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        e.key.toLowerCase() === "x"
+      ) {
         e.preventDefault();
 
         clearCanvas();
@@ -554,9 +566,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
     canvas.addEventListener("pointerdown", pointerDown);
 
     window.addEventListener("pointermove", pointerMove);
-
     window.addEventListener("pointerup", pointerUp);
-
     window.addEventListener("keydown", keyDown);
 
     canvas.addEventListener("wheel", wheel, {
@@ -567,22 +577,23 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
       cancelAnimationFrame(frame);
 
       window.removeEventListener("resize", resize);
-
       window.removeEventListener("pointermove", pointerMove);
-
       window.removeEventListener("pointerup", pointerUp);
-
       window.removeEventListener("keydown", keyDown);
 
       canvas.removeEventListener("pointerdown", pointerDown);
-
       canvas.removeEventListener("wheel", wheel);
     };
   }, [ref, setTool, bgColor, onZoomChange]);
 
   return (
     <>
-      <canvas ref={canvasRef} className="canvas" />
+      <canvas
+        ref={canvasRef}
+        className="canvas"
+        data-tool={tool}
+        aria-label="Drawing canvas"
+      />
 
       {textEditor ? (
         <textarea
@@ -609,7 +620,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
 
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              e.target.blur(); 
+              e.target.blur();
             }
           }}
           onBlur={(e) => {

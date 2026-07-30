@@ -15,7 +15,6 @@ export default {
       width,
       height,
       fontSize: 28,
-      fill: "#ffffff",
     };
   },
 
@@ -24,7 +23,7 @@ export default {
   render(ctx, shape) {
     ctx.save();
     ctx.font = `${shape.fontSize}px Inter`;
-    ctx.fillStyle = shape.fill;
+    ctx.fillStyle = shape.fill || ctx.strokeStyle;
     ctx.textBaseline = "top";
 
     const lineHeight = shape.fontSize * 1.3;

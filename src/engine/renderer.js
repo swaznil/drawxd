@@ -92,6 +92,7 @@ export function drawShapes(
   selectedShapes,
   selectionBox,
   eraserTrail,
+  defaultStroke,
 ) {
   ctx.save();
 
@@ -109,7 +110,7 @@ export function drawShapes(
       continue;
     }
 
-    ctx.strokeStyle = shape.stroke || "#e5e7eb";
+    ctx.strokeStyle = shape.stroke || defaultStroke;
 
     ctx.fillStyle = shape.fill || "transparent";
 
