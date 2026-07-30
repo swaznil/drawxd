@@ -1,5 +1,5 @@
 import { Pencil } from "lucide-react";
-import { distanceToLine } from "../shapeUtils";
+import { distanceToLine, invalidateShapeBounds } from "../shapeUtils";
 import { PENCIL_SAMPLE_DISTANCE } from "../constants";
 
 export default {
@@ -30,14 +30,34 @@ export default {
       y: pos.y,
       pressure: pos.pressure ?? 0.5,
     });
+    invalidateShapeBounds(shape);
   },
 
   render(ctx, shape) {
-    if (shape.points.length < 2) {
+    if (!shape.points.length) {
       return;
     }
 
     const baseWidth = ctx.lineWidth;
+
+    if (shape.points.length === 1) {
+      const point = shape.points[0];
+      const pressure = point.pressure ?? 0.5;
+
+      ctx.beginPath();
+      ctx.arc(
+        point.x,
+        point.y,
+        (baseWidth * (0.55 + pressure * 0.9)) / 2,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+      return;
+    }
+
+    let activePressureBand = null;
 
     for (let index = 1; index < shape.points.length; index++) {
       const previous = shape.points[index - 1];
@@ -54,26 +74,40 @@ export default {
           ? point
           : {
               x: (previous.x + point.x) / 2,
-              y: (previous.y + point.y) / 2,
-            };
+            y: (previous.y + point.y) / 2,
+          };
       const pressure = point.pressure ?? previous.pressure ?? 0.5;
+      const pressureBand = Math.round(pressure * 6);
 
-      ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
+      if (pressureBand !== activePressureBand) {
+        if (activePressureBand !== null) {
+          ctx.stroke();
+        }
+
+        activePressureBand = pressureBand;
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineWidth = baseWidth * (0.55 + (pressureBand / 6) * 0.9);
+      }
+
       ctx.quadraticCurveTo(previous.x, previous.y, end.x, end.y);
-      ctx.lineWidth = baseWidth * (0.55 + pressure * 0.9);
-      ctx.stroke();
     }
 
+    ctx.stroke();
     ctx.lineWidth = baseWidth;
   },
 
-  hitTest(shape, x, y) {
+  hitTest(shape, x, y, tolerance = 8) {
+    if (shape.points.length === 1) {
+      const point = shape.points[0];
+      return Math.hypot(x - point.x, y - point.y) < tolerance;
+    }
+
     for (let i = 0; i < shape.points.length - 1; i++) {
       const a = shape.points[i];
       const b = shape.points[i + 1];
 
-      if (distanceToLine(a.x, a.y, b.x, b.y, x, y) < 8) {
+      if (distanceToLine(a.x, a.y, b.x, b.y, x, y) < tolerance) {
         return true;
       }
     }

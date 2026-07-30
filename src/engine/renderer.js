@@ -1,5 +1,23 @@
 import { getShape } from "./registry";
-import { getSelectionBounds, normalizeBounds } from "./shapeUtils";
+import { getBounds, getSelectionBounds, normalizeBounds } from "./shapeUtils";
+
+function isShapeVisible(shape, camera, viewportWidth, viewportHeight) {
+  if (!viewportWidth || !viewportHeight) return true;
+
+  const padding = 32 / camera.zoom;
+  const bounds = getBounds(shape);
+  const left = -camera.x - padding;
+  const top = -camera.y - padding;
+  const right = -camera.x + viewportWidth / camera.zoom + padding;
+  const bottom = -camera.y + viewportHeight / camera.zoom + padding;
+
+  return (
+    bounds.x + bounds.width >= left &&
+    bounds.x <= right &&
+    bounds.y + bounds.height >= top &&
+    bounds.y <= bottom
+  );
+}
 
 function drawHandle(ctx, x, y, zoom) {
   const size = 8 / zoom;
@@ -101,6 +119,8 @@ export function drawShapes(
   selectionBox,
   eraserTrail,
   defaultStroke,
+  viewportWidth,
+  viewportHeight,
 ) {
   ctx.save();
 
@@ -112,6 +132,10 @@ export function drawShapes(
   ctx.lineJoin = "round";
 
   for (const shape of shapes) {
+    if (!isShapeVisible(shape, camera, viewportWidth, viewportHeight)) {
+      continue;
+    }
+
     const shapeDef = getShape(shape.type);
 
     if (!shapeDef) {

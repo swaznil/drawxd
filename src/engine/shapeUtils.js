@@ -1,3 +1,11 @@
+const boundsCache = new WeakMap();
+
+export function invalidateShapeBounds(shape) {
+  if (shape && typeof shape === "object") {
+    boundsCache.delete(shape);
+  }
+}
+
 export function normalizeBounds(x, y, width, height) {
   return {
     x: width < 0 ? x + width : x,
@@ -23,19 +31,44 @@ export function pointInBounds(shape, x, y) {
 }
 
 export function getBounds(shape) {
-  if (shape.points?.length) {
-    const xs = shape.points.map((p) => p.x);
-    const ys = shape.points.map((p) => p.y);
+  const cached = boundsCache.get(shape);
 
-    return {
-      x: Math.min(...xs),
-      y: Math.min(...ys),
-      width: Math.max(...xs) - Math.min(...xs),
-      height: Math.max(...ys) - Math.min(...ys),
-    };
+  if (cached) {
+    return cached;
   }
 
-  return normalizeBounds(shape.x, shape.y, shape.width || 0, shape.height || 0);
+  let bounds;
+
+  if (shape.points?.length) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const point of shape.points) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    bounds = {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  } else {
+    bounds = normalizeBounds(
+      shape.x,
+      shape.y,
+      shape.width || 0,
+      shape.height || 0,
+    );
+  }
+
+  boundsCache.set(shape, bounds);
+  return bounds;
 }
 
 export function boundsIntersect(a, b) {
@@ -97,20 +130,25 @@ export function resizeShape(shape, handle, dx, dy) {
       shape.height += dy;
       break;
   }
+
+  invalidateShapeBounds(shape);
 }
 
 export function moveShape(shape, dx, dy) {
   if (shape.points) {
     shape.points = shape.points.map((p) => ({
+      ...p,
       x: p.x + dx,
       y: p.y + dy,
     }));
 
+    invalidateShapeBounds(shape);
     return;
   }
 
   shape.x += dx;
   shape.y += dy;
+  invalidateShapeBounds(shape);
 }
 
 export function distanceToLine(x1, y1, x2, y2, px, py) {

@@ -170,11 +170,6 @@ export default function Toolbar({
 
         {colorMenuOpen && (
           <div className="color-menu">
-            <div className="color-menu-heading">
-              <span>Style</span>
-              <span>{Math.round(drawingOpacity * 100)}%</span>
-            </div>
-
             <div className="style-section-label">
               <span>Stroke color</span>
               <span>{drawingColor.toUpperCase()}</span>
@@ -295,7 +290,6 @@ export default function Toolbar({
         title="Clear canvas (Ctrl Shift X)"
         aria-label="Clear canvas"
       >
-
         <Trash2 size={18} />
       </button>
     </div>

@@ -29,7 +29,7 @@ export default {
     ctx.stroke();
   },
 
-  hitTest(shape, x, y) {
+  hitTest(shape, x, y, tolerance = 8) {
     return (
       distanceToLine(
         shape.x,
@@ -38,7 +38,7 @@ export default {
         shape.y + shape.height,
         x,
         y,
-      ) < 8
+      ) < tolerance
     );
   },
 };

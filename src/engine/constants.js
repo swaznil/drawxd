@@ -26,13 +26,13 @@ export const CANVAS_BACKGROUND_PRESETS = [
 export const DEFAULT_TEXT_WIDTH = 260;
 export const DEFAULT_TEXT_HEIGHT = 80;
 export const DEFAULT_FONT_SIZE = 28;
-export const PENCIL_SAMPLE_DISTANCE = 0.75;
-export const HISTORY_LIMIT = 100;
+export const PENCIL_SAMPLE_DISTANCE = 1.25;
+export const HISTORY_LIMIT = 50;
 
 export const PROJECT_APP = "drawxd";
 export const PROJECT_VERSION = 1;
 export const LOCAL_PROJECT_KEY = "drawxd:autosave:v1";
-export const AUTOSAVE_DELAY = 350;
+export const AUTOSAVE_DELAY = 600;
 export const MAX_PROJECT_FILE_SIZE = 25 * 1024 * 1024;
 
 export const MAX_EXPORT_DIMENSION = 8192;

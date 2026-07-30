@@ -35,7 +35,12 @@ import {
 import "./shapes/index";
 import { getShape } from "./registry";
 
-import { getSelectionBounds, moveShape } from "./shapeUtils";
+import {
+  getBounds,
+  getSelectionBounds,
+  invalidateShapeBounds,
+  moveShape,
+} from "./shapeUtils";
 
 const Canvas = forwardRef(function Canvas(
   {
@@ -82,8 +87,12 @@ const Canvas = forwardRef(function Canvas(
   const localSaveTimerRef = useRef(null);
   const hasRestoredLocalProjectRef = useRef(false);
   const bgColorRef = useRef(bgColor);
+  const previousBackgroundRef = useRef(bgColor);
   const saveStatusCallbackRef = useRef(onSaveStatusChange);
+  const zoomCallbackRef = useRef(onZoomChange);
   const applyProjectDataRef = useRef(null);
+  const drawSceneRef = useRef(null);
+  const renderFrameRef = useRef(null);
 
   const lastWorldRef = useRef({
     x: 0,
@@ -97,11 +106,21 @@ const Canvas = forwardRef(function Canvas(
   const cancelTextEditRef = useRef(false);
 
   toolRef.current = tool;
-  drawingColorRef.current = drawingColor;
+  drawingColorRef.current = drawingColor || getCanvasInkColor(bgColor);
   strokeWidthRef.current = strokeWidth;
   drawingOpacityRef.current = drawingOpacity;
   bgColorRef.current = bgColor;
   saveStatusCallbackRef.current = onSaveStatusChange;
+  zoomCallbackRef.current = onZoomChange;
+
+  const requestRender = () => {
+    if (renderFrameRef.current !== null) return;
+
+    renderFrameRef.current = requestAnimationFrame(() => {
+      renderFrameRef.current = null;
+      drawSceneRef.current?.();
+    });
+  };
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -150,6 +169,7 @@ const Canvas = forwardRef(function Canvas(
       onBackgroundChange?.(project.background);
     }
 
+    requestRender();
     return validShapes.length;
   };
 
@@ -195,7 +215,12 @@ const Canvas = forwardRef(function Canvas(
   }, []);
 
   useEffect(() => {
-    scheduleLocalSave();
+    if (previousBackgroundRef.current !== bgColor) {
+      previousBackgroundRef.current = bgColor;
+      scheduleLocalSave();
+    }
+
+    requestRender();
   }, [bgColor]);
 
   useEffect(() => {
@@ -224,12 +249,24 @@ const Canvas = forwardRef(function Canvas(
   };
 
   const getShapeAt = (x, y) => {
+    const hitPadding = 10 / cameraRef.current.zoom;
+
     for (let i = shapesRef.current.length - 1; i >= 0; i--) {
       const shape = shapesRef.current[i];
+      const bounds = getBounds(shape);
+
+      if (
+        x < bounds.x - hitPadding ||
+        x > bounds.x + bounds.width + hitPadding ||
+        y < bounds.y - hitPadding ||
+        y > bounds.y + bounds.height + hitPadding
+      ) {
+        continue;
+      }
 
       const shapeDef = getShape(shape.type);
 
-      if (shapeDef?.hitTest?.(shape, x, y)) {
+      if (shapeDef?.hitTest?.(shape, x, y, hitPadding)) {
         return shape;
       }
     }
@@ -300,6 +337,7 @@ const Canvas = forwardRef(function Canvas(
     shapesRef.current = [];
     selectedRef.current = [];
     scheduleLocalSave();
+    requestRender();
   };
 
   const copySelected = () => {
@@ -324,6 +362,7 @@ const Canvas = forwardRef(function Canvas(
     selectedRef.current = pasted;
     clipboardRef.current = structuredClone(pasted);
     scheduleLocalSave();
+    requestRender();
   };
 
   const undo = () => {
@@ -333,6 +372,7 @@ const Canvas = forwardRef(function Canvas(
     shapesRef.current = historyRef.current.pop();
     selectedRef.current = [];
     scheduleLocalSave();
+    requestRender();
   };
 
   const redo = () => {
@@ -342,6 +382,7 @@ const Canvas = forwardRef(function Canvas(
     shapesRef.current = redoRef.current.pop();
     selectedRef.current = [];
     scheduleLocalSave();
+    requestRender();
   };
 
   useImperativeHandle(ref, () => ({
@@ -367,6 +408,7 @@ const Canvas = forwardRef(function Canvas(
         if (opacity !== undefined) shape.opacity = opacity;
       });
       scheduleLocalSave();
+      requestRender();
     },
 
     async exportImage({ width, height, format, transparent, quality }) {
@@ -399,6 +441,12 @@ const Canvas = forwardRef(function Canvas(
         throw new Error("Your browser could not create this image format.");
       }
 
+      if (blob.type && blob.type !== selectedFormat.mimeType) {
+        throw new Error(
+          `Your browser does not support ${format.toUpperCase()} export.`,
+        );
+      }
+
       downloadBlob(blob, `drawxd-drawing.${selectedFormat.extension}`);
     },
 
@@ -425,24 +473,35 @@ const Canvas = forwardRef(function Canvas(
 
   useEffect(() => {
     const canvas = canvasRef.current;
-
     const ctx = canvas.getContext("2d");
+    let viewportWidth = 0;
+    let viewportHeight = 0;
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      viewportWidth = Math.max(1, Math.round(canvas.clientWidth));
+      viewportHeight = Math.max(1, Math.round(canvas.clientHeight));
+
+      if (
+        canvas.width !== viewportWidth ||
+        canvas.height !== viewportHeight
+      ) {
+        canvas.width = viewportWidth;
+        canvas.height = viewportHeight;
+      }
+
+      requestRender();
     };
 
-    resize();
-
-    window.addEventListener("resize", resize);
-
-    let frame;
-
     const render = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, viewportWidth, viewportHeight);
 
-      drawGrid(ctx, cameraRef.current, canvas.width, canvas.height, bgColor);
+      drawGrid(
+        ctx,
+        cameraRef.current,
+        viewportWidth,
+        viewportHeight,
+        bgColorRef.current,
+      );
 
       drawShapes(
         ctx,
@@ -451,20 +510,23 @@ const Canvas = forwardRef(function Canvas(
         selectedRef.current,
         selectionBoxRef.current,
         eraserTrailRef.current,
-        getCanvasInkColor(bgColor),
+        getCanvasInkColor(bgColorRef.current),
+        viewportWidth,
+        viewportHeight,
       );
 
       const zoomLabel = `${Math.round(cameraRef.current.zoom * 100)}%`;
 
       if (zoomLabel !== lastZoomLabelRef.current) {
         lastZoomLabelRef.current = zoomLabel;
-        onZoomChange?.(zoomLabel);
+        zoomCallbackRef.current?.(zoomLabel);
       }
-
-      frame = requestAnimationFrame(render);
     };
 
-    render();
+    drawSceneRef.current = render;
+    resize();
+
+    window.addEventListener("resize", resize);
 
     const eventHandlers = createCanvasEventHandlers({
       canvas,
@@ -498,6 +560,7 @@ const Canvas = forwardRef(function Canvas(
         getHandleAt,
         getShapeAt,
         pasteClipboard,
+        requestRender,
         redo,
         saveHistory,
         scheduleLocalSave,
@@ -509,12 +572,16 @@ const Canvas = forwardRef(function Canvas(
     const detachCanvasEvents = attachCanvasEventHandlers(canvas, eventHandlers);
 
     return () => {
-      cancelAnimationFrame(frame);
+      if (renderFrameRef.current !== null) {
+        cancelAnimationFrame(renderFrameRef.current);
+        renderFrameRef.current = null;
+      }
 
+      drawSceneRef.current = null;
       window.removeEventListener("resize", resize);
       detachCanvasEvents();
     };
-  }, [setTool, bgColor, onZoomChange]);
+  }, [setTool]);
 
   return (
     <>
@@ -599,6 +666,7 @@ const Canvas = forwardRef(function Canvas(
                   existingShape.text = value;
                   existingShape.width = width;
                   existingShape.height = height;
+                  invalidateShapeBounds(existingShape);
                 } else {
                   shapesRef.current = shapesRef.current.filter(
                     (shape) => shape !== existingShape,
@@ -627,6 +695,7 @@ const Canvas = forwardRef(function Canvas(
 
             if (textChanged) {
               scheduleLocalSave();
+              requestRender();
             }
 
             setTextEditor((prev) => (prev === textEditor ? null : prev));

@@ -17,7 +17,7 @@ export function createProjectData(shapes, camera, background) {
       y: camera.y,
       zoom: camera.zoom,
     },
-    shapes: structuredClone(shapes),
+    shapes,
   };
 }
 
@@ -73,11 +73,20 @@ export function renderProjectImage({
   canvas.width = width;
   canvas.height = height;
 
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", {
+    alpha: !background,
+    colorSpace: "srgb",
+  });
+
+  if (!ctx) {
+    return Promise.reject(new Error("Could not prepare the image canvas."));
+  }
 
   if (background) {
+    ctx.globalCompositeOperation = "copy";
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = "source-over";
   }
 
   const scale = Math.min(width / sourceWidth, height / sourceHeight);
@@ -106,6 +115,10 @@ export function renderProjectImage({
   });
 
   return new Promise((resolve) => {
-    canvas.toBlob(resolve, mimeType, quality);
+    canvas.toBlob(
+      resolve,
+      mimeType,
+      Math.max(0, Math.min(1, Number.isFinite(quality) ? quality : 0.9)),
+    );
   });
 }

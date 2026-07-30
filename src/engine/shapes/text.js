@@ -62,7 +62,7 @@ export default {
 
   render(ctx, shape) {
     ctx.save();
-    ctx.font = `${shape.fontSize}px Inter`;
+    ctx.font = `${shape.fontSize}px Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
     ctx.fillStyle = shape.fill || ctx.strokeStyle;
     ctx.textBaseline = "top";
 

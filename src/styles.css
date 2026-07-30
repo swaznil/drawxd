@@ -18,16 +18,23 @@ html,body,#root {
   overflow: hidden;
 }
 
-button,input {
+button,
+input,
+select,
+textarea {
   font: inherit;
 }
 
-button,a,input {
+button,
+a,
+input,
+select,
+textarea {
   -webkit-tap-highlight-color: transparent;
 }
 
 button:focus-visible, a:focus-visible,
-input:focus-visible, textarea:focus-visible {
+input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid #a8a29e;
   outline-offset: 2px;
 }
@@ -240,19 +247,6 @@ input:focus-visible, textarea:focus-visible {
   box-shadow: var(--shadow);
   transform: translateX(-50%);
 }
-.color-menu-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 11px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.color-menu-heading span:last-child {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10px;
-}
-
 .style-section-label {
   display: flex;
   align-items: center;

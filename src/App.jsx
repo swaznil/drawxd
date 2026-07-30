@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Menu,
   Download,
@@ -41,6 +41,12 @@ const shortcutsList = [
   { keys: "Ctrl Shift X", label: "Clear canvas" },
 ];
 
+const exportFormatLabels = {
+  png: "PNG",
+  jpeg: "JPEG",
+  webp: "WebP",
+};
+
 export default function App() {
   const [tool, setTool] = useState("select");
   const [theme, setTheme] = useState(DEFAULT_THEME);
@@ -57,6 +63,7 @@ export default function App() {
   const [exportTransparent, setExportTransparent] = useState(false);
   const [exportFormat, setExportFormat] = useState("png");
   const [exportQuality, setExportQuality] = useState(DEFAULT_EXPORT_QUALITY);
+  const [exporting, setExporting] = useState(false);
   const [zoomLabel, setZoomLabel] = useState("100%");
   const [localSaveStatus, setLocalSaveStatus] = useState("saved");
   const [notice, setNotice] = useState("");
@@ -64,6 +71,38 @@ export default function App() {
   const canvasRef = useRef(null);
   const importInputRef = useRef(null);
   const noticeTimerRef = useRef(null);
+  const topMenuRef = useRef(null);
+  const shortcutsRef = useRef(null);
+
+  useEffect(() => {
+    const closeFloatingPanels = (event) => {
+      if (!topMenuRef.current?.contains(event.target)) {
+        setMenuOpen(false);
+      }
+
+      if (!shortcutsRef.current?.contains(event.target)) {
+        setShortcutsOpen(false);
+      }
+    };
+
+    const closeOnEscape = (event) => {
+      if (event.key !== "Escape") return;
+
+      setMenuOpen(false);
+      setShortcutsOpen(false);
+      setExportOpen(false);
+      setAboutOpen(false);
+    };
+
+    window.addEventListener("pointerdown", closeFloatingPanels);
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeFloatingPanels);
+      window.removeEventListener("keydown", closeOnEscape);
+      window.clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
 
   const clearCanvas = () => {
     canvasRef.current?.clear();
@@ -84,6 +123,10 @@ export default function App() {
   };
 
   const handleExport = async () => {
+    if (exporting) return;
+
+    setExporting(true);
+
     try {
       await canvasRef.current?.exportImage({
         width: exportWidth,
@@ -93,9 +136,11 @@ export default function App() {
         quality: exportQuality,
       });
       setExportOpen(false);
-      showNotice(`Exported ${exportFormat.toUpperCase()} image`);
+      showNotice(`Exported ${exportFormatLabels[exportFormat]} image`);
     } catch (error) {
       showNotice(error.message || "Could not export this image");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -134,7 +179,9 @@ export default function App() {
 
   const changeDrawingColor = (color) => {
     setDrawingColor(color);
-    canvasRef.current?.setSelectedStyle({ color });
+    canvasRef.current?.setSelectedStyle({
+      color: color || getCanvasInkColor(bgColor),
+    });
   };
 
   const changeStrokeWidth = (width) => {
@@ -162,13 +209,22 @@ export default function App() {
         onStrokeWidthChange={changeStrokeWidth}
         drawingOpacity={drawingOpacity}
         onDrawingOpacityChange={changeDrawingOpacity}
+        onOpen={() => {
+          setMenuOpen(false);
+          setShortcutsOpen(false);
+        }}
       />
 
-      <div className="top-menu">
+      <div className="top-menu" ref={topMenuRef}>
         <button
           className="tool-btn"
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={() => {
+            setMenuOpen(!menuOpen);
+            setShortcutsOpen(false);
+          }}
           title="Menu"
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
         >
           <Menu size={18} />
         </button>
@@ -306,7 +362,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="shortcuts-hint">
+      <div className="shortcuts-hint" ref={shortcutsRef}>
         {shortcutsOpen && (
           <div className="shortcuts-panel">
             {shortcutsList.map((s) => (
@@ -320,8 +376,12 @@ export default function App() {
 
         <button
           className="tool-btn"
-          onClick={() => setShortcutsOpen(!shortcutsOpen)}
+          onClick={() => {
+            setShortcutsOpen(!shortcutsOpen);
+            setMenuOpen(false);
+          }}
           title="Keyboard shortcuts"
+          aria-expanded={shortcutsOpen}
         >
           <Keyboard size={18} />
         </button>
@@ -329,18 +389,29 @@ export default function App() {
 
       {exportOpen && (
         <div className="modal-overlay" onClick={() => setExportOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Export image</h3>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="export-heading">Export image</h3>
 
             <label className="modal-field">
               Format
               <select
                 value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value)}
+                onChange={(e) => {
+                  const format = e.target.value;
+
+                  setExportFormat(format);
+                  if (format === "jpeg") setExportTransparent(false);
+                }}
               >
-                <option value="png">PNG — lossless</option>
-                <option value="jpeg">JPEG — smaller file</option>
-                <option value="webp">WebP — modern format</option>
+                <option value="png">PNG · lossless</option>
+                <option value="jpeg">JPEG · compact</option>
+                <option value="webp">WebP · compact + crisp</option>
               </select>
             </label>
 
@@ -404,6 +475,7 @@ export default function App() {
               <button
                 className="modal-btn"
                 onClick={() => setExportOpen(false)}
+                disabled={exporting}
               >
                 Cancel
               </button>
@@ -411,9 +483,11 @@ export default function App() {
               <button
                 className="modal-btn primary"
                 onClick={handleExport}
-                disabled={!exportWidth || !exportHeight}
+                disabled={!exportWidth || !exportHeight || exporting}
               >
-                Export {exportFormat.toUpperCase()}
+                {exporting
+                  ? "Exporting..."
+                  : `Export ${exportFormatLabels[exportFormat]}`}
               </button>
             </div>
           </div>
@@ -422,8 +496,14 @@ export default function App() {
 
       {aboutOpen && (
         <div className="modal-overlay" onClick={() => setAboutOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>drawxd</h3>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="about-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="about-heading">drawxd</h3>
 
             <p className="about-text">
               Experimenting on building a whiteboard with infinite canvas

@@ -29,8 +29,10 @@ export default {
   render(ctx, shape) {
     const spikes = 5;
 
-    const outerRadius = Math.abs(shape.width) / 2;
-    const innerRadius = outerRadius / 2;
+    const outerRadiusX = Math.abs(shape.width) / 2;
+    const outerRadiusY = Math.abs(shape.height) / 2;
+    const innerRadiusX = outerRadiusX / 2;
+    const innerRadiusY = outerRadiusY / 2;
     const cx = shape.x + shape.width / 2;
     const cy = shape.y + shape.height / 2;
 
@@ -38,19 +40,19 @@ export default {
     let step = Math.PI / spikes;
 
     ctx.beginPath();
-    ctx.moveTo(cx, cy - outerRadius);
+    ctx.moveTo(cx, cy - outerRadiusY);
 
     for (let i = 0; i < spikes; i++) {
       ctx.lineTo(
-        cx + Math.cos(rot) * outerRadius,
-        cy + Math.sin(rot) * outerRadius,
+        cx + Math.cos(rot) * outerRadiusX,
+        cy + Math.sin(rot) * outerRadiusY,
       );
 
       rot += step;
 
       ctx.lineTo(
-        cx + Math.cos(rot) * innerRadius,
-        cy + Math.sin(rot) * innerRadius,
+        cx + Math.cos(rot) * innerRadiusX,
+        cy + Math.sin(rot) * innerRadiusY,
       );
 
       rot += step;

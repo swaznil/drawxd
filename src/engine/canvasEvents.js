@@ -13,6 +13,7 @@ import {
   boundsIntersect,
   getBounds,
   getSelectionBounds,
+  invalidateShapeBounds,
   moveShape,
   resizeShape,
 } from "./shapeUtils";
@@ -57,6 +58,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
     getHandleAt,
     getShapeAt,
     pasteClipboard,
+    requestRender,
     redo,
     saveHistory,
     scheduleLocalSave,
@@ -73,6 +75,34 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
       pressure: pointer.pressure,
       minDistance: minimumDistance / camera.current.zoom,
     };
+  };
+
+  const eraseAt = (position) => {
+    const previousLength = shapes.current.length;
+    const hitPadding = 10 / camera.current.zoom;
+
+    shapes.current = shapes.current.filter((shape) => {
+      const bounds = getBounds(shape);
+
+      if (
+        position.x < bounds.x - hitPadding ||
+        position.x > bounds.x + bounds.width + hitPadding ||
+        position.y < bounds.y - hitPadding ||
+        position.y > bounds.y + bounds.height + hitPadding
+      ) {
+        return true;
+      }
+
+      const shapeDefinition = getShape(shape.type);
+      return !shapeDefinition?.hitTest?.(
+        shape,
+        position.x,
+        position.y,
+        hitPadding,
+      );
+    });
+
+    return shapes.current.length !== previousLength;
   };
 
   const pointerDown = (event) => {
@@ -108,6 +138,8 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
       saveHistory();
       erasing.current = true;
       eraserTrail.current = [position];
+      eraseAt(position);
+      requestRender();
       return;
     }
 
@@ -127,6 +159,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
         selected.current = selected.current.includes(hit)
           ? selected.current.filter((shape) => shape !== hit)
           : [...selected.current, hit];
+        requestRender();
         return;
       }
 
@@ -142,6 +175,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
         dragging.current = true;
         transformHistorySaved.current = false;
         canvas.dataset.interaction = "moving";
+        requestRender();
         return;
       }
 
@@ -153,6 +187,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
         dragging.current = true;
         transformHistorySaved.current = false;
         canvas.dataset.interaction = "moving";
+        requestRender();
         return;
       }
 
@@ -168,6 +203,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
         selected.current = [];
       }
 
+      requestRender();
       return;
     }
 
@@ -205,10 +241,15 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
     shapes.current.push(shape);
     currentShape.current = shape;
     drawing.current = true;
+    requestRender();
   };
 
   const pointerMove = (event) => {
     if (!event.isPrimary) return;
+
+    if (activePointer.current === null && event.target !== canvas) {
+      return;
+    }
 
     const hoverPosition = getWorldPointer(event);
 
@@ -243,6 +284,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
         ? event.getCoalescedEvents()
         : [event];
     const pointerSamples = samples.length ? samples : [event];
+    let sceneChanged = false;
 
     pointerSamples.forEach((sample) => {
       const position = getWorldPointer(sample);
@@ -262,15 +304,14 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
 
       if (erasing.current) {
         eraserTrail.current.push(position);
-        shapes.current = shapes.current.filter((shape) => {
-          const shapeDefinition = getShape(shape.type);
-          return !shapeDefinition?.hitTest?.(shape, position.x, position.y);
-        });
+        sceneChanged = eraseAt(position) || sceneChanged;
+        sceneChanged = true;
       }
 
       if (selectionBox.current) {
         selectionBox.current.width += dx;
         selectionBox.current.height += dy;
+        invalidateShapeBounds(selectionBox.current);
 
         const box = getBounds(selectionBox.current);
         const hits = shapes.current.filter((shape) =>
@@ -278,16 +319,19 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
         );
 
         selected.current = [...new Set([...selectionBase.current, ...hits])];
+        sceneChanged = true;
       }
 
       if (dragging.current) {
         selected.current.forEach((shape) => moveShape(shape, dx, dy));
+        sceneChanged = true;
       }
 
       if (resizing.current) {
         selected.current.forEach((shape) =>
           resizeShape(shape, resizeHandle.current, dx, dy),
         );
+        sceneChanged = true;
       }
 
       if (drawing.current && currentShape.current) {
@@ -295,11 +339,18 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
           currentShape.current,
           position,
         );
+        invalidateShapeBounds(currentShape.current);
+        sceneChanged = true;
       }
     });
 
     if (panning.current) {
       panCamera(camera.current, event.movementX, event.movementY);
+      sceneChanged = true;
+    }
+
+    if (sceneChanged) {
+      requestRender();
     }
   };
 
@@ -317,6 +368,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
         currentShape.current,
         position,
       );
+      invalidateShapeBounds(currentShape.current);
     }
 
     const projectChanged =
@@ -347,6 +399,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
 
     activePointer.current = null;
     canvas.style.cursor = "";
+    requestRender();
 
     if (projectChanged) {
       scheduleLocalSave();
@@ -362,6 +415,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
 
     event.preventDefault();
     selected.current = [shape];
+    requestRender();
 
     showTextEditor(
       {
@@ -387,6 +441,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
     if (!event.ctrlKey) {
       panCamera(camera.current, -event.deltaX, -event.deltaY);
       scheduleLocalSave();
+      requestRender();
       return;
     }
 
@@ -403,6 +458,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
 
     zoomCamera(camera.current, before, after);
     scheduleLocalSave();
+    requestRender();
   };
 
   const keyDown = (event) => {
@@ -422,6 +478,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
     if (event.key === "Escape") {
       selected.current = [];
       selectionBox.current = null;
+      requestRender();
       return;
     }
 
@@ -451,6 +508,7 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
             : 0;
 
       selected.current.forEach((shape) => moveShape(shape, dx, dy));
+      requestRender();
       return;
     }
 
@@ -468,11 +526,13 @@ export function createCanvasEventHandlers({ canvas, refs, actions }) {
       );
       selected.current = [];
       scheduleLocalSave();
+      requestRender();
     }
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
       event.preventDefault();
       selected.current = [...shapes.current];
+      requestRender();
     }
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
