@@ -2,8 +2,10 @@ import { useRef, useState } from "react";
 import {
   Menu,
   Download,
+  FolderOpen,
   Link2,
   Info,
+  Save,
   Sun,
   Moon,
   Keyboard,
@@ -47,9 +49,15 @@ export default function App() {
   const [exportWidth, setExportWidth] = useState(1920);
   const [exportHeight, setExportHeight] = useState(1080);
   const [exportTransparent, setExportTransparent] = useState(false);
+  const [exportFormat, setExportFormat] = useState("png");
+  const [exportQuality, setExportQuality] = useState(0.9);
   const [zoomLabel, setZoomLabel] = useState("100%");
+  const [localSaveStatus, setLocalSaveStatus] = useState("saved");
+  const [notice, setNotice] = useState("");
 
   const canvasRef = useRef(null);
+  const importInputRef = useRef(null);
+  const noticeTimerRef = useRef(null);
 
   const clearCanvas = () => {
     canvasRef.current?.clear();
@@ -63,14 +71,54 @@ export default function App() {
     canvasRef.current?.redo();
   };
 
-  const handleExport = () => {
-    canvasRef.current?.exportPng(
-      exportWidth,
-      exportHeight,
-      exportTransparent,
+  const showNotice = (message) => {
+    setNotice(message);
+    window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(
+      () => setNotice(""),
+      3200,
     );
+  };
 
-    setExportOpen(false);
+  const handleExport = async () => {
+    try {
+      await canvasRef.current?.exportImage({
+        width: exportWidth,
+        height: exportHeight,
+        format: exportFormat,
+        transparent: exportTransparent,
+        quality: exportQuality,
+      });
+      setExportOpen(false);
+      showNotice(`Exported ${exportFormat.toUpperCase()} image`);
+    } catch (error) {
+      showNotice(error.message || "Could not export this image");
+    }
+  };
+
+  const saveProject = () => {
+    canvasRef.current?.saveProject();
+    setMenuOpen(false);
+    showNotice("Project file saved");
+  };
+
+  const openProject = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    try {
+      const result = await canvasRef.current?.importProject(file);
+      setMenuOpen(false);
+      showNotice(
+        `Opened ${result.shapeCount} ${
+          result.shapeCount === 1 ? "object" : "objects"
+        }`,
+      );
+    } catch (error) {
+      showNotice(error.message || "Could not open this project");
+    }
   };
 
   const resetAppearance = () => {
@@ -124,6 +172,19 @@ export default function App() {
 
         {menuOpen && (
           <div className="top-menu-panel">
+            <button className="shape-item" onClick={saveProject}>
+              <Save size={16} />
+              <span>Save project</span>
+            </button>
+
+            <button
+              className="shape-item"
+              onClick={() => importInputRef.current?.click()}
+            >
+              <FolderOpen size={16} />
+              <span>Open project</span>
+            </button>
+
             <button
               className="shape-item"
               onClick={() => {
@@ -132,8 +193,10 @@ export default function App() {
               }}
             >
               <Download size={16} />
-              <span>Export PNG</span>
+              <span>Export Image</span>
             </button>
+
+            <div className="top-menu-divider" />
 
             <button
               className="shape-item"
@@ -220,11 +283,37 @@ export default function App() {
         strokeWidth={strokeWidth}
         drawingOpacity={drawingOpacity}
         onZoomChange={setZoomLabel}
+        onBackgroundChange={setBgColor}
+        onSaveStatusChange={setLocalSaveStatus}
       />
 
       <div className="zoom-indicator">
         <span>{zoomLabel}</span>
+        <span
+          className={`local-save-status status-${localSaveStatus}`}
+        >
+          {localSaveStatus === "saving"
+            ? "Saving..."
+            : localSaveStatus === "error"
+              ? "Local save unavailable"
+              : "Saved locally"}
+        </span>
       </div>
+
+      <input
+        ref={importInputRef}
+        className="project-file-input"
+        type="file"
+        accept=".drawxd,.json,application/json"
+        onChange={openProject}
+        tabIndex={-1}
+      />
+
+      {notice && (
+        <div className="app-notice" role="status">
+          {notice}
+        </div>
+      )}
 
       <div className="shortcuts-hint">
         {shortcutsOpen && (
@@ -253,40 +342,81 @@ export default function App() {
           onClick={() => setExportOpen(false)}
         >
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Export PNG</h3>
+            <h3>Export image</h3>
 
             <label className="modal-field">
-              Width
-              <input
-                type="number"
-                value={exportWidth}
-                onChange={(e) =>
-                  setExportWidth(Number(e.target.value))
-                }
-              />
+              Format
+              <select
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value)}
+              >
+                <option value="png">PNG — lossless</option>
+                <option value="jpeg">JPEG — smaller file</option>
+                <option value="webp">WebP — modern format</option>
+              </select>
             </label>
 
-            <label className="modal-field">
-              Height
-              <input
-                type="number"
-                value={exportHeight}
-                onChange={(e) =>
-                  setExportHeight(Number(e.target.value))
-                }
-              />
-            </label>
+            <div className="modal-fields">
+              <label className="modal-field">
+                Width
+                <input
+                  type="number"
+                  min="1"
+                  max="8192"
+                  value={exportWidth}
+                  onChange={(e) =>
+                    setExportWidth(Number(e.target.value))
+                  }
+                />
+              </label>
+
+              <label className="modal-field">
+                Height
+                <input
+                  type="number"
+                  min="1"
+                  max="8192"
+                  value={exportHeight}
+                  onChange={(e) =>
+                    setExportHeight(Number(e.target.value))
+                  }
+                />
+              </label>
+            </div>
 
             <label className="modal-checkbox">
               <input
                 type="checkbox"
                 checked={exportTransparent}
+                disabled={exportFormat === "jpeg"}
                 onChange={(e) =>
                   setExportTransparent(e.target.checked)
                 }
               />
               Transparent background
+              {exportFormat === "jpeg" && (
+                <span className="field-note">Not available for JPEG</span>
+              )}
             </label>
+
+            {exportFormat !== "png" && (
+              <label className="modal-field">
+                Quality
+                <div className="quality-control">
+                  <input
+                    type="range"
+                    min="40"
+                    max="100"
+                    step="5"
+                    value={Math.round(exportQuality * 100)}
+                    onChange={(e) =>
+                      setExportQuality(Number(e.target.value) / 100)
+                    }
+                  />
+                  <span>{Math.round(exportQuality * 100)}%</span>
+                </div>
+              </label>
+            )}
 
             <div className="modal-actions">
               <button
@@ -299,8 +429,9 @@ export default function App() {
               <button
                 className="modal-btn primary"
                 onClick={handleExport}
+                disabled={!exportWidth || !exportHeight}
               >
-                Export
+                Export {exportFormat.toUpperCase()}
               </button>
             </div>
           </div>

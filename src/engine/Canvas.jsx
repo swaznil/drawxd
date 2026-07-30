@@ -10,6 +10,12 @@ import { createCamera, panCamera, zoomCamera } from "./camera";
 import { getCanvasInkColor } from "./color";
 import { drawGrid } from "./grid";
 import { drawShapes } from "./renderer";
+import {
+  createProjectData,
+  downloadBlob,
+  LOCAL_PROJECT_KEY,
+  parseProjectData,
+} from "./project";
 import { pointerToCanvas, screenToWorld } from "./utils";
 import { HANDLE_SIZE, TOOL_SHORTCUTS, ZOOM_MIN, ZOOM_MAX } from "./constants";
 
@@ -24,7 +30,15 @@ import {
   resizeShape,
 } from "./shapeUtils";
 
-function exportShapesAsPng(shapes, width, height, bgColor, defaultStroke) {
+function exportShapesAsImage(
+  shapes,
+  width,
+  height,
+  bgColor,
+  defaultStroke,
+  mimeType,
+  quality,
+) {
   const bounds = getSelectionBounds(shapes);
 
   const padding = 40;
@@ -78,12 +92,25 @@ function exportShapesAsPng(shapes, width, height, bgColor, defaultStroke) {
   }
 
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), "image/png");
+    canvas.toBlob((blob) => resolve(blob), mimeType, quality);
   });
 }
 
 const Canvas = forwardRef(
-  ({ tool, setTool, bgColor, drawingColor, strokeWidth, drawingOpacity, onZoomChange},ref,) => {
+  (
+    {
+      tool,
+      setTool,
+      bgColor,
+      drawingColor,
+      strokeWidth,
+      drawingOpacity,
+      onZoomChange,
+      onBackgroundChange,
+      onSaveStatusChange,
+    },
+    ref,
+  ) => {
   const canvasRef = useRef(null);
 
   const cameraRef = useRef(createCamera());
@@ -112,6 +139,11 @@ const Canvas = forwardRef(
   const spacePressedRef = useRef(false);
   const nudgeActiveRef = useRef(false);
   const transformHistorySavedRef = useRef(false);
+  const localSaveTimerRef = useRef(null);
+  const hasRestoredLocalProjectRef = useRef(false);
+  const bgColorRef = useRef(bgColor);
+  const saveStatusCallbackRef = useRef(onSaveStatusChange);
+  const applyProjectDataRef = useRef(null);
 
   const lastWorldRef = useRef({
     x: 0,
@@ -128,12 +160,127 @@ const Canvas = forwardRef(
   drawingColorRef.current = drawingColor;
   strokeWidthRef.current = strokeWidth;
   drawingOpacityRef.current = drawingOpacity;
+  bgColorRef.current = bgColor;
+  saveStatusCallbackRef.current = onSaveStatusChange;
 
   useEffect(() => {
     if (canvasRef.current) {
       canvasRef.current.style.cursor = "";
     }
   }, [tool]);
+
+  const getProjectData = () =>
+    createProjectData(
+      shapesRef.current,
+      cameraRef.current,
+      bgColorRef.current,
+    );
+
+  const applyProjectData = (project, keepHistory = false) => {
+    const validShapes = project.shapes.filter(
+      (shape) =>
+        shape &&
+        typeof shape === "object" &&
+        typeof shape.type === "string" &&
+        getShape(shape.type),
+    );
+
+    if (keepHistory) {
+      saveHistory();
+    } else {
+      historyRef.current = [];
+      redoRef.current = [];
+    }
+
+    shapesRef.current = structuredClone(validShapes);
+    selectedRef.current = [];
+    clipboardRef.current = [];
+
+    if (project.camera) {
+      cameraRef.current = {
+        x: Number.isFinite(project.camera.x) ? project.camera.x : 0,
+        y: Number.isFinite(project.camera.y) ? project.camera.y : 0,
+        zoom: Math.max(
+          ZOOM_MIN,
+          Math.min(
+            ZOOM_MAX,
+            Number.isFinite(project.camera.zoom)
+              ? project.camera.zoom
+              : 1,
+          ),
+        ),
+      };
+    }
+
+    if (/^#[0-9a-f]{6}$/i.test(project.background || "")) {
+      onBackgroundChange?.(project.background);
+    }
+
+    return validShapes.length;
+  };
+  
+  applyProjectDataRef.current = applyProjectData;
+
+  const saveLocalProject = () => {
+    try {
+      localStorage.setItem(
+        LOCAL_PROJECT_KEY,
+        JSON.stringify(getProjectData()),
+      );
+      saveStatusCallbackRef.current?.("saved");
+    } catch {
+      saveStatusCallbackRef.current?.("error");
+    }
+  };
+
+  const scheduleLocalSave = () => {
+    if (!hasRestoredLocalProjectRef.current) return;
+
+    saveStatusCallbackRef.current?.("saving");
+    window.clearTimeout(localSaveTimerRef.current);
+    localSaveTimerRef.current = window.setTimeout(saveLocalProject, 350);
+  };
+
+  useEffect(() => {
+    if (hasRestoredLocalProjectRef.current) return;
+
+    hasRestoredLocalProjectRef.current = true;
+
+    try {
+      const savedProject = localStorage.getItem(LOCAL_PROJECT_KEY);
+
+      if (savedProject) {
+        applyProjectDataRef.current(parseProjectData(savedProject));
+      }
+
+      saveStatusCallbackRef.current?.("saved");
+    } catch {
+      localStorage.removeItem(LOCAL_PROJECT_KEY);
+      saveStatusCallbackRef.current?.("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    scheduleLocalSave();
+  }, [bgColor]);
+
+  useEffect(
+    () => {
+      const saveBeforeLeaving = () => {
+        if (hasRestoredLocalProjectRef.current) {
+          saveLocalProject();
+        }
+      };
+
+      window.addEventListener("pagehide", saveBeforeLeaving);
+
+      return () => {
+        window.removeEventListener("pagehide", saveBeforeLeaving);
+        window.clearTimeout(localSaveTimerRef.current);
+      };
+    },
+    [],
+  );
 
   const saveHistory = () => {
     historyRef.current.push(structuredClone(shapesRef.current));
@@ -224,6 +371,7 @@ const Canvas = forwardRef(
 
     shapesRef.current = [];
     selectedRef.current = [];
+    scheduleLocalSave();
   };
 
   const copySelected = () => {
@@ -247,6 +395,7 @@ const Canvas = forwardRef(
     shapesRef.current = [...shapesRef.current, ...pasted];
     selectedRef.current = pasted;
     clipboardRef.current = structuredClone(pasted);
+    scheduleLocalSave();
   };
 
   useImperativeHandle(ref, () => ({
@@ -262,6 +411,7 @@ const Canvas = forwardRef(
       shapesRef.current = historyRef.current.pop();
 
       selectedRef.current = [];
+      scheduleLocalSave();
     },
 
     redo() {
@@ -272,6 +422,7 @@ const Canvas = forwardRef(
       shapesRef.current = redoRef.current.pop();
 
       selectedRef.current = [];
+      scheduleLocalSave();
     },
 
     setSelectedStyle({ color, strokeWidth: width, opacity }) {
@@ -291,25 +442,70 @@ const Canvas = forwardRef(
         if (width !== undefined) shape.strokeWidth = width;
         if (opacity !== undefined) shape.opacity = opacity;
       });
+      scheduleLocalSave();
     },
 
-    async exportPng(width, height, transparent) {
-      const blob = await exportShapesAsPng(
+    async exportImage({
+      width,
+      height,
+      format,
+      transparent,
+      quality,
+    }) {
+      if (
+        !Number.isFinite(width) ||
+        !Number.isFinite(height) ||
+        width < 1 ||
+        height < 1 ||
+        width > 8192 ||
+        height > 8192
+      ) {
+        throw new Error("Export dimensions must be between 1 and 8192 pixels.");
+      }
+
+      const formats = {
+        png: { mimeType: "image/png", extension: "png" },
+        jpeg: { mimeType: "image/jpeg", extension: "jpg" },
+        webp: { mimeType: "image/webp", extension: "webp" },
+      };
+      const selectedFormat = formats[format] || formats.png;
+      const canBeTransparent = format !== "jpeg";
+      const blob = await exportShapesAsImage(
         shapesRef.current,
         width,
         height,
-        transparent ? null : bgColor,
-        getCanvasInkColor(bgColor),
+        transparent && canBeTransparent ? null : bgColorRef.current,
+        getCanvasInkColor(bgColorRef.current),
+        selectedFormat.mimeType,
+        quality,
       );
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      if (!blob) {
+        throw new Error("Your browser could not create this image format.");
+      }
 
-      a.href = url;
-      a.download = "drawing.png";
-      a.click();
+      downloadBlob(blob, `drawxd-drawing.${selectedFormat.extension}`);
+    },
 
-      URL.revokeObjectURL(url);
+    saveProject() {
+      const blob = new Blob(
+        [JSON.stringify(getProjectData(), null, 2)],
+        { type: "application/json" },
+      );
+
+      downloadBlob(blob, "drawxd-project.drawxd");
+    },
+
+    async importProject(file) {
+      if (!file || file.size > 25 * 1024 * 1024) {
+        throw new Error("Choose a drawxd project smaller than 25 MB.");
+      }
+
+      const project = parseProjectData(await file.text());
+      const shapeCount = applyProjectData(project, true);
+
+      scheduleLocalSave();
+      return { shapeCount, background: project.background };
     },
   }));
 
@@ -631,6 +827,12 @@ const Canvas = forwardRef(
         shapeDef?.update(currentShapeRef.current, pos);
       }
 
+      const projectChanged =
+        drawingRef.current ||
+        erasingRef.current ||
+        transformHistorySavedRef.current ||
+        panningRef.current;
+
       drawingRef.current = false;
       draggingRef.current = false;
       panningRef.current = false;
@@ -655,6 +857,10 @@ const Canvas = forwardRef(
 
       activePointerIdRef.current = null;
       canvas.style.cursor = "";
+
+      if (projectChanged) {
+        scheduleLocalSave();
+      }
     };
 
     const doubleClick = (e) => {
@@ -706,6 +912,7 @@ const Canvas = forwardRef(
       const after = screenToWorld(pointer.x, pointer.y, camera);
 
       zoomCamera(camera, before, after);
+      scheduleLocalSave();
     };
 
     const keyDown = (e) => {
@@ -774,6 +981,7 @@ const Canvas = forwardRef(
         );
 
         selectedRef.current = [];
+        scheduleLocalSave();
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
@@ -833,6 +1041,10 @@ const Canvas = forwardRef(
       }
 
       if (e.key.startsWith("Arrow")) {
+        if (nudgeActiveRef.current) {
+          scheduleLocalSave();
+        }
+
         nudgeActiveRef.current = false;
       }
     };
@@ -934,6 +1146,7 @@ const Canvas = forwardRef(
             const camera = cameraRef.current;
             const width = e.target.offsetWidth / camera.zoom;
             const height = e.target.offsetHeight / camera.zoom;
+            let textChanged = false;
             const existingShape = textEditor.shapeId
               ? shapesRef.current.find(
                   (shape) => shape.id === textEditor.shapeId,
@@ -947,6 +1160,7 @@ const Canvas = forwardRef(
                 height !== existingShape.height
               ) {
                 saveHistory();
+                textChanged = true;
 
                 if (value) {
                   existingShape.text = value;
@@ -961,6 +1175,7 @@ const Canvas = forwardRef(
               }
             } else if (value) {
               saveHistory();
+              textChanged = true;
 
               const shape = getShape("text").create(
                 textEditor.worldX,
@@ -975,6 +1190,10 @@ const Canvas = forwardRef(
               shape.opacity = drawingOpacityRef.current;
 
               shapesRef.current.push(shape);
+            }
+
+            if (textChanged) {
+              scheduleLocalSave();
             }
 
             setTextEditor((prev) => (prev === textEditor ? null : prev));
