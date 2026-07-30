@@ -34,6 +34,8 @@ export default function App() {
   const [theme, setTheme] = useState(DEFAULT_THEME);
   const [bgColor, setBgColor] = useState(DEFAULT_BG);
   const [drawingColor, setDrawingColor] = useState(null);
+  const [strokeWidth, setStrokeWidth] = useState(2);
+  const [drawingOpacity, setDrawingOpacity] = useState(1);
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -77,7 +79,17 @@ export default function App() {
 
   const changeDrawingColor = (color) => {
     setDrawingColor(color);
-    canvasRef.current?.setSelectedColor(color);
+    canvasRef.current?.setSelectedStyle({ color });
+  };
+
+  const changeStrokeWidth = (width) => {
+    setStrokeWidth(width);
+    canvasRef.current?.setSelectedStyle({ strokeWidth: width });
+  };
+
+  const changeDrawingOpacity = (opacity) => {
+    setDrawingOpacity(opacity);
+    canvasRef.current?.setSelectedStyle({ opacity });
   };
 
   return (
@@ -91,6 +103,10 @@ export default function App() {
         drawingColor={activeDrawingColor}
         drawingColorAuto={drawingColor === null}
         onDrawingColorChange={changeDrawingColor}
+        strokeWidth={strokeWidth}
+        onStrokeWidthChange={changeStrokeWidth}
+        drawingOpacity={drawingOpacity}
+        onDrawingOpacityChange={changeDrawingOpacity}
       />
 
       <div className="top-menu">
@@ -197,6 +213,8 @@ export default function App() {
         setTool={setTool}
         bgColor={bgColor}
         drawingColor={drawingColor}
+        strokeWidth={strokeWidth}
+        drawingOpacity={drawingOpacity}
         onZoomChange={setZoomLabel}
       />
 

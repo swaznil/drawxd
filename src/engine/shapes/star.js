@@ -30,19 +30,14 @@ export default {
     const spikes = 5;
 
     const outerRadius = Math.abs(shape.width) / 2;
-
     const innerRadius = outerRadius / 2;
-
     const cx = shape.x + shape.width / 2;
-
     const cy = shape.y + shape.height / 2;
 
     let rot = Math.PI / 2 * 3;
-
     let step = Math.PI / spikes;
 
     ctx.beginPath();
-
     ctx.moveTo(cx, cy - outerRadius);
 
     for (let i = 0; i < spikes; i++) {
@@ -62,7 +57,6 @@ export default {
     }
 
     ctx.closePath();
-
     ctx.fill();
     ctx.stroke();
   },

@@ -67,11 +67,14 @@ function exportShapesAsPng(shapes, width, height, bgColor, defaultStroke) {
       continue;
     }
 
+    ctx.save();
+    ctx.globalAlpha = shape.opacity ?? 1;
     ctx.strokeStyle = shape.stroke || defaultStroke;
     ctx.fillStyle = shape.fill || "transparent";
     ctx.lineWidth = shape.strokeWidth || 2;
 
     shapeDef.render(ctx, shape);
+    ctx.restore();
   }
 
   return new Promise((resolve) => {
@@ -80,12 +83,14 @@ function exportShapesAsPng(shapes, width, height, bgColor, defaultStroke) {
 }
 
 const Canvas = forwardRef(
-  ({ tool, setTool, bgColor, drawingColor, onZoomChange }, ref) => {
+  ({ tool, setTool, bgColor, drawingColor, strokeWidth, drawingOpacity, onZoomChange},ref,) => {
   const canvasRef = useRef(null);
 
   const cameraRef = useRef(createCamera());
   const toolRef = useRef(tool);
   const drawingColorRef = useRef(drawingColor);
+  const strokeWidthRef = useRef(strokeWidth);
+  const drawingOpacityRef = useRef(drawingOpacity);
 
   const shapesRef = useRef([]);
   const selectedRef = useRef([]);
@@ -112,9 +117,12 @@ const Canvas = forwardRef(
   const redoRef = useRef([]);
   const [textEditor, setTextEditor] = useState(null);
   const textInputRef = useRef(null);
+  const cancelTextEditRef = useRef(false);
 
   toolRef.current = tool;
   drawingColorRef.current = drawingColor;
+  strokeWidthRef.current = strokeWidth;
+  drawingOpacityRef.current = drawingOpacity;
 
   const saveHistory = () => {
     historyRef.current.push(structuredClone(shapesRef.current));
@@ -138,6 +146,26 @@ const Canvas = forwardRef(
     }
 
     return null;
+  };
+
+  const showTextEditor = (editor, selectAll = false) => {
+    cancelTextEditRef.current = false;
+    setTextEditor(editor);
+
+    requestAnimationFrame(() => {
+      const input = textInputRef.current;
+
+      if (!input) return;
+
+      input.focus();
+
+      if (selectAll) {
+        input.select();
+      } else {
+        input.selectionStart = input.value.length;
+        input.selectionEnd = input.value.length;
+      }
+    });
   };
 
   const getHandleAt = (x, y) => {
@@ -225,17 +253,22 @@ const Canvas = forwardRef(
       selectedRef.current = [];
     },
 
-    setSelectedColor(color) {
+    setSelectedStyle({ color, strokeWidth: width, opacity }) {
       if (!selectedRef.current.length) return;
 
       saveHistory();
 
       selectedRef.current.forEach((shape) => {
-        shape.stroke = color;
+        if (color !== undefined) {
+          shape.stroke = color;
 
-        if (shape.type === "text") {
-          shape.fill = color;
+          if (shape.type === "text") {
+            shape.fill = color;
+          }
         }
+
+        if (width !== undefined) shape.strokeWidth = width;
+        if (opacity !== undefined) shape.opacity = opacity;
       });
     },
 
@@ -382,20 +415,16 @@ const Canvas = forwardRef(
       if (currentTool === "text") {
         e.preventDefault();
 
-        setTextEditor({
+        showTextEditor({
           screenX: e.clientX,
           screenY: e.clientY,
           worldX: pos.x,
           worldY: pos.y,
+          value: "",
+          width: 260,
+          height: 80,
+          fontSize: 28,
         });
-
-        setTimeout(() => {
-          if (textInputRef.current) {
-            textInputRef.current.focus();
-            textInputRef.current.selectionStart = 0;
-            textInputRef.current.selectionEnd = 0;
-          }
-        }, 0);
 
         return;
       }
@@ -408,6 +437,8 @@ const Canvas = forwardRef(
 
       const shape = shapeDef.create(pos.x, pos.y);
       shape.stroke = drawingColorRef.current;
+      shape.strokeWidth = strokeWidthRef.current;
+      shape.opacity = drawingOpacityRef.current;
 
       shapesRef.current.push(shape);
 
@@ -481,6 +512,34 @@ const Canvas = forwardRef(
       selectionBoxRef.current = null;
 
       eraserTrailRef.current = [];
+    };
+
+    const doubleClick = (e) => {
+      const camera = cameraRef.current;
+      const pos = screenToWorld(e.clientX, e.clientY, camera);
+      const shape = getShapeAt(pos.x, pos.y);
+
+      if (shape?.type !== "text") return;
+
+      e.preventDefault();
+      selectedRef.current = [shape];
+
+      showTextEditor(
+        {
+          shapeId: shape.id,
+          screenX: (shape.x + camera.x) * camera.zoom,
+          screenY: (shape.y + camera.y) * camera.zoom,
+          worldX: shape.x,
+          worldY: shape.y,
+          value: shape.text,
+          width: Math.max(220, shape.width * camera.zoom),
+          height: Math.max(60, shape.height * camera.zoom),
+          fontSize: (shape.fontSize || 28) * camera.zoom,
+          color: shape.fill || shape.stroke,
+          opacity: shape.opacity ?? 1,
+        },
+        true,
+      );
     };
 
     const wheel = (e) => {
@@ -572,6 +631,7 @@ const Canvas = forwardRef(
     };
 
     canvas.addEventListener("pointerdown", pointerDown);
+    canvas.addEventListener("dblclick", doubleClick);
 
     window.addEventListener("pointermove", pointerMove);
     window.addEventListener("pointerup", pointerUp);
@@ -590,6 +650,7 @@ const Canvas = forwardRef(
       window.removeEventListener("keydown", keyDown);
 
       canvas.removeEventListener("pointerdown", pointerDown);
+      canvas.removeEventListener("dblclick", doubleClick);
       canvas.removeEventListener("wheel", wheel);
     };
   }, [ref, setTool, bgColor, onZoomChange]);
@@ -609,14 +670,18 @@ const Canvas = forwardRef(
           className="canvas-text-input"
           autoFocus
           spellCheck={false}
-          placeholder="Type..."
+          defaultValue={textEditor.value}
+          placeholder="Type something…"
+          title="Ctrl or Cmd + Enter to finish · Escape to cancel"
           style={{
             left: `${textEditor.screenX}px`,
             top: `${textEditor.screenY}px`,
-            width: "260px",
-            height: "120px",
-            color: drawingColor || getCanvasInkColor(bgColor),
-            caretColor: drawingColor || getCanvasInkColor(bgColor),
+            width: `${textEditor.width}px`,
+            height: `${textEditor.height}px`,
+            fontSize: `${textEditor.fontSize}px`,
+            color: textEditor.color || drawingColor || getCanvasInkColor(bgColor),
+            caretColor: textEditor.color || drawingColor || getCanvasInkColor(bgColor),
+            opacity: textEditor.opacity ?? drawingOpacity,
           }}
           onPointerDown={(e) => {
             e.stopPropagation();
@@ -625,28 +690,74 @@ const Canvas = forwardRef(
             e.stopPropagation();
 
             if (e.key === "Escape") {
+              cancelTextEditRef.current = true;
               setTextEditor(null);
             }
 
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (
+              e.key === "Enter" &&
+              (e.ctrlKey || e.metaKey)
+            ) {
               e.preventDefault();
               e.target.blur();
             }
           }}
+          onInput={(e) => {
+            e.currentTarget.style.height = "auto";
+            e.currentTarget.style.height = `${Math.min(
+              360,
+              Math.max(60, e.currentTarget.scrollHeight),
+            )}px`;
+          }}
           onBlur={(e) => {
-            const value = e.target.value.trim();
+            if (cancelTextEditRef.current) {
+              cancelTextEditRef.current = false;
+              return;
+            }
 
-            if (value) {
+            const value = e.target.value.trim();
+            const camera = cameraRef.current;
+            const width = e.target.offsetWidth / camera.zoom;
+            const height = e.target.offsetHeight / camera.zoom;
+            const existingShape = textEditor.shapeId
+              ? shapesRef.current.find(
+                  (shape) => shape.id === textEditor.shapeId,
+                )
+              : null;
+
+            if (existingShape) {
+              if (
+                value !== existingShape.text ||
+                width !== existingShape.width ||
+                height !== existingShape.height
+              ) {
+                saveHistory();
+
+                if (value) {
+                  existingShape.text = value;
+                  existingShape.width = width;
+                  existingShape.height = height;
+                } else {
+                  shapesRef.current = shapesRef.current.filter(
+                    (shape) => shape !== existingShape,
+                  );
+                  selectedRef.current = [];
+                }
+              }
+            } else if (value) {
               saveHistory();
+
               const shape = getShape("text").create(
                 textEditor.worldX,
                 textEditor.worldY,
                 value,
-                e.target.offsetWidth,
-                e.target.offsetHeight,
+                width,
+                height,
               );
               shape.stroke = drawingColorRef.current;
               shape.fill = drawingColorRef.current;
+              shape.strokeWidth = strokeWidthRef.current;
+              shape.opacity = drawingOpacityRef.current;
 
               shapesRef.current.push(shape);
             }

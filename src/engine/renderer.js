@@ -48,9 +48,7 @@ function drawSelectionBox(ctx, box) {
   ctx.fillStyle = "rgba(96,165,250,0.12)";
 
   ctx.setLineDash([8, 6]);
-
   ctx.fillRect(box.x, box.y, box.width, box.height);
-
   ctx.strokeRect(box.x, box.y, box.width, box.height);
 
   ctx.restore();
@@ -65,7 +63,6 @@ function drawEraserTrail(ctx, trail, zoom) {
 
   ctx.strokeStyle = "rgba(239,68,68,0.9)";
   ctx.lineWidth = 6 / zoom;
-
   ctx.setLineDash([10, 10]);
 
   ctx.beginPath();
@@ -110,13 +107,15 @@ export function drawShapes(
       continue;
     }
 
+    ctx.save();
+    ctx.globalAlpha = shape.opacity ?? 1;
     ctx.strokeStyle = shape.stroke || defaultStroke;
 
     ctx.fillStyle = shape.fill || "transparent";
-
     ctx.lineWidth = (shape.strokeWidth || 2) / camera.zoom;
 
     shapeDef.render(ctx, shape);
+    ctx.restore();
   }
 
   if (selectedShapes.length) {
@@ -124,7 +123,6 @@ export function drawShapes(
   }
 
   drawSelectionBox(ctx, selectionBox);
-
   drawEraserTrail(ctx, eraserTrail, camera.zoom);
 
   ctx.restore();

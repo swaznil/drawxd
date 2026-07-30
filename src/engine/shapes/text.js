@@ -1,5 +1,34 @@
 import { Type } from "lucide-react";
 
+function wrapText(ctx, text, maxWidth) {
+  const lines = [];
+
+  text.split("\n").forEach((paragraph) => {
+    if (!paragraph) {
+      lines.push("");
+      return;
+    }
+
+    const words = paragraph.split(/\s+/);
+    let line = words.shift() || "";
+
+    words.forEach((word) => {
+      const candidate = `${line} ${word}`;
+
+      if (ctx.measureText(candidate).width <= maxWidth) {
+        line = candidate;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+    });
+
+    lines.push(line);
+  });
+  
+  return lines;
+}
+
 export default {
   type: "text",
   label: "Text",
@@ -27,7 +56,7 @@ export default {
     ctx.textBaseline = "top";
 
     const lineHeight = shape.fontSize * 1.3;
-    const lines = shape.text.split("\n");
+    const lines = wrapText(ctx, shape.text, shape.width);
 
     lines.forEach((line, i) => {
       ctx.fillText(line, shape.x, shape.y + i * lineHeight);

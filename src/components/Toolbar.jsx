@@ -37,6 +37,8 @@ const drawingColors = [
   "#ec4899",
 ];
 
+const strokeWidths = [1, 2, 4, 8];
+
 export default function Toolbar({
   tool,
   setTool,
@@ -47,6 +49,10 @@ export default function Toolbar({
   drawingColor,
   drawingColorAuto,
   onDrawingColorChange,
+  strokeWidth,
+  onStrokeWidthChange,
+  drawingOpacity,
+  onDrawingOpacityChange,
 }) {
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
@@ -165,7 +171,12 @@ export default function Toolbar({
         {colorMenuOpen && (
           <div className="color-menu">
             <div className="color-menu-heading">
-              <span>Drawing color</span>
+              <span>Style</span>
+              <span>{Math.round(drawingOpacity * 100)}%</span>
+            </div>
+
+            <div className="style-section-label">
+              <span>Stroke color</span>
               <span>{drawingColor.toUpperCase()}</span>
             </div>
 
@@ -215,6 +226,47 @@ export default function Toolbar({
                 />
               </label>
             </div>
+
+            <div className="style-divider" />
+
+            <div className="style-section-label">
+              <span>Stroke width</span>
+              <span>{strokeWidth}px</span>
+            </div>
+
+            <div className="stroke-width-options">
+              {strokeWidths.map((width) => (
+                <button
+                  key={width}
+                  className={`stroke-width-btn ${
+                    strokeWidth === width ? "active" : ""
+                  }`}
+                  onClick={() => onStrokeWidthChange(width)}
+                  aria-label={`Use ${width} pixel stroke width`}
+                  aria-pressed={strokeWidth === width}
+                >
+                  <span style={{ height: `${width}px` }} />
+                </button>
+              ))}
+            </div>
+
+            <div className="style-section-label opacity-label">
+              <span>Opacity</span>
+              <span>{Math.round(drawingOpacity * 100)}%</span>
+            </div>
+
+            <input
+              className="opacity-slider"
+              type="range"
+              min="10"
+              max="100"
+              step="5"
+              value={Math.round(drawingOpacity * 100)}
+              onChange={(event) =>
+                onDrawingOpacityChange(Number(event.target.value) / 100)
+              }
+              aria-label="Drawing opacity"
+            />
           </div>
         )}
       </div>
