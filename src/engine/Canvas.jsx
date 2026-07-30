@@ -10,7 +10,7 @@ import { createCamera, panCamera, zoomCamera } from "./camera";
 import { getCanvasInkColor } from "./color";
 import { drawGrid } from "./grid";
 import { drawShapes } from "./renderer";
-import { screenToWorld } from "./utils";
+import { pointerToCanvas, screenToWorld } from "./utils";
 import { HANDLE_SIZE, TOOL_SHORTCUTS, ZOOM_MIN, ZOOM_MAX } from "./constants";
 
 import "./shapes/index";
@@ -107,6 +107,11 @@ const Canvas = forwardRef(
   const resizeHandleRef = useRef(null);
   const eraserTrailRef = useRef([]);
   const lastZoomLabelRef = useRef("100%");
+  const activePointerIdRef = useRef(null);
+  const selectionBaseRef = useRef([]);
+  const spacePressedRef = useRef(false);
+  const nudgeActiveRef = useRef(false);
+  const transformHistorySavedRef = useRef(false);
 
   const lastWorldRef = useRef({
     x: 0,
@@ -123,6 +128,12 @@ const Canvas = forwardRef(
   drawingColorRef.current = drawingColor;
   strokeWidthRef.current = strokeWidth;
   drawingOpacityRef.current = drawingOpacity;
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      canvasRef.current.style.cursor = "";
+    }
+  }, [tool]);
 
   const saveHistory = () => {
     historyRef.current.push(structuredClone(shapesRef.current));
@@ -169,12 +180,20 @@ const Canvas = forwardRef(
   };
 
   const getHandleAt = (x, y) => {
+    if (
+      selectedRef.current.length !== 1 ||
+      selectedRef.current[0]?.points
+    ) {
+      return null;
+    }
+
     const bounds = getSelectionBounds(selectedRef.current);
 
     if (!bounds) {
       return null;
     }
 
+    const handleSize = HANDLE_SIZE / cameraRef.current.zoom;
     const handles = {
       tl: [bounds.x, bounds.y],
       tr: [bounds.x + bounds.width, bounds.y],
@@ -186,10 +205,10 @@ const Canvas = forwardRef(
       const [hx, hy] = handles[key];
 
       if (
-        x >= hx - HANDLE_SIZE &&
-        x <= hx + HANDLE_SIZE &&
-        y >= hy - HANDLE_SIZE &&
-        y <= hy + HANDLE_SIZE
+        x >= hx - handleSize &&
+        x <= hx + handleSize &&
+        y >= hy - handleSize &&
+        y <= hy + handleSize
       ) {
         return key;
       }
@@ -199,6 +218,8 @@ const Canvas = forwardRef(
   };
 
   const clearCanvas = () => {
+    if (!shapesRef.current.length) return;
+
     saveHistory();
 
     shapesRef.current = [];
@@ -336,15 +357,37 @@ const Canvas = forwardRef(
     render();
 
     const pointerDown = (e) => {
+      if (!e.isPrimary) return;
+
+      if (
+        activePointerIdRef.current !== null &&
+        activePointerIdRef.current !== e.pointerId
+      ) {
+        return;
+      }
+
+      activePointerIdRef.current = e.pointerId;
+      canvas.setPointerCapture?.(e.pointerId);
+
       const camera = cameraRef.current;
       const currentTool = toolRef.current;
-
-      const pos = screenToWorld(e.clientX, e.clientY, camera);
+      const pointer = pointerToCanvas(e, canvas);
+      const pos = {
+        ...screenToWorld(pointer.x, pointer.y, camera),
+        pressure: pointer.pressure,
+        minDistance: 0.75 / camera.zoom,
+      };
 
       lastWorldRef.current = pos;
 
-      if (currentTool === "pan" || e.button === 1 || e.button === 2) {
+      if (
+        currentTool === "pan" ||
+        spacePressedRef.current ||
+        e.button === 1 ||
+        e.button === 2
+      ) {
         panningRef.current = true;
+        canvas.dataset.interaction = "grabbing";
         return;
       }
 
@@ -362,11 +405,19 @@ const Canvas = forwardRef(
         const handle = getHandleAt(pos.x, pos.y);
 
         if (handle) {
-          saveHistory();
-
           resizingRef.current = true;
           resizeHandleRef.current = handle;
+          transformHistorySavedRef.current = false;
 
+          return;
+        }
+
+        const hit = getShapeAt(pos.x, pos.y);
+
+        if (e.shiftKey && hit) {
+          selectedRef.current = selectedRef.current.includes(hit)
+            ? selectedRef.current.filter((shape) => shape !== hit)
+            : [...selectedRef.current, hit];
           return;
         }
 
@@ -379,27 +430,28 @@ const Canvas = forwardRef(
           pos.y >= selectionBounds.y &&
           pos.y <= selectionBounds.y + selectionBounds.height
         ) {
-          saveHistory();
-
           draggingRef.current = true;
+          transformHistorySavedRef.current = false;
+          canvas.dataset.interaction = "moving";
 
           return;
         }
-
-        const hit = getShapeAt(pos.x, pos.y);
 
         if (hit) {
           if (!selectedRef.current.includes(hit)) {
             selectedRef.current = [hit];
           }
 
-          saveHistory();
-
           draggingRef.current = true;
+          transformHistorySavedRef.current = false;
+          canvas.dataset.interaction = "moving";
 
           return;
         }
 
+        selectionBaseRef.current = e.shiftKey
+          ? [...selectedRef.current]
+          : [];
         selectionBoxRef.current = {
           x: pos.x,
           y: pos.y,
@@ -407,7 +459,9 @@ const Canvas = forwardRef(
           height: 0,
         };
 
-        selectedRef.current = [];
+        if (!e.shiftKey) {
+          selectedRef.current = [];
+        }
 
         return;
       }
@@ -440,6 +494,10 @@ const Canvas = forwardRef(
       shape.strokeWidth = strokeWidthRef.current;
       shape.opacity = drawingOpacityRef.current;
 
+      if (shape.points?.[0]) {
+        shape.points[0].pressure = pos.pressure;
+      }
+
       shapesRef.current.push(shape);
 
       currentShapeRef.current = shape;
@@ -448,59 +506,131 @@ const Canvas = forwardRef(
     };
 
     const pointerMove = (e) => {
+      if (!e.isPrimary) return;
+
       const camera = cameraRef.current;
-      const pos = screenToWorld(e.clientX, e.clientY, camera);
+      const pointer = pointerToCanvas(e, canvas);
+      const hoverPos = screenToWorld(pointer.x, pointer.y, camera);
 
-      const dx = pos.x - lastWorldRef.current.x;
-      const dy = pos.y - lastWorldRef.current.y;
+      if (activePointerIdRef.current === null) {
+        if (spacePressedRef.current) {
+          canvas.style.cursor = "grab";
+          return;
+        }
 
-      lastWorldRef.current = pos;
+        if (toolRef.current === "select") {
+          const handle = getHandleAt(hoverPos.x, hoverPos.y);
+
+          if (handle === "tl" || handle === "br") {
+            canvas.style.cursor = "nwse-resize";
+          } else if (handle === "tr" || handle === "bl") {
+            canvas.style.cursor = "nesw-resize";
+          } else if (getShapeAt(hoverPos.x, hoverPos.y)) {
+            canvas.style.cursor = "move";
+          } else {
+            canvas.style.cursor = "default";
+          }
+        }
+
+        return;
+      }
+
+      if (activePointerIdRef.current !== e.pointerId) return;
+
+      const samples =
+        (drawingRef.current || erasingRef.current) &&
+        typeof e.getCoalescedEvents === "function"
+          ? e.getCoalescedEvents()
+          : [e];
+      const pointerSamples = samples.length ? samples : [e];
+
+      pointerSamples.forEach((sample) => {
+        const samplePointer = pointerToCanvas(sample, canvas);
+        const pos = {
+          ...screenToWorld(samplePointer.x, samplePointer.y, camera),
+          pressure: samplePointer.pressure,
+          minDistance: 0.75 / camera.zoom,
+        };
+        const dx = pos.x - lastWorldRef.current.x;
+        const dy = pos.y - lastWorldRef.current.y;
+
+        lastWorldRef.current = pos;
+
+        if (
+          (draggingRef.current || resizingRef.current) &&
+          !transformHistorySavedRef.current &&
+          (dx !== 0 || dy !== 0)
+        ) {
+          saveHistory();
+          transformHistorySavedRef.current = true;
+        }
+
+        if (erasingRef.current) {
+          eraserTrailRef.current.push(pos);
+
+          shapesRef.current = shapesRef.current.filter((shape) => {
+            const shapeDef = getShape(shape.type);
+
+            return !shapeDef?.hitTest?.(shape, pos.x, pos.y);
+          });
+        }
+
+        if (selectionBoxRef.current) {
+          selectionBoxRef.current.width += dx;
+          selectionBoxRef.current.height += dy;
+
+          const box = getBounds(selectionBoxRef.current);
+          const hits = shapesRef.current.filter((shape) =>
+            boundsIntersect(getBounds(shape), box),
+          );
+
+          selectedRef.current = [
+            ...new Set([...selectionBaseRef.current, ...hits]),
+          ];
+        }
+
+        if (draggingRef.current) {
+          selectedRef.current.forEach((shape) => moveShape(shape, dx, dy));
+        }
+
+        if (resizingRef.current) {
+          selectedRef.current.forEach((shape) =>
+            resizeShape(shape, resizeHandleRef.current, dx, dy),
+          );
+        }
+
+        if (drawingRef.current && currentShapeRef.current) {
+          const shapeDef = getShape(currentShapeRef.current.type);
+          shapeDef?.update(currentShapeRef.current, pos);
+        }
+      });
 
       if (panningRef.current) {
         panCamera(camera, e.movementX, e.movementY);
       }
+    };
 
-      if (erasingRef.current) {
-        eraserTrailRef.current.push(pos);
-
-        shapesRef.current = shapesRef.current.filter((shape) => {
-          const shapeDef = getShape(shape.type);
-
-          return !shapeDef?.hitTest?.(shape, pos.x, pos.y);
-        });
-      }
-
-      if (selectionBoxRef.current) {
-        selectionBoxRef.current.width += dx;
-        selectionBoxRef.current.height += dy;
-
-        const box = getBounds(selectionBoxRef.current);
-
-        selectedRef.current = shapesRef.current.filter((s) =>
-          boundsIntersect(getBounds(s), box),
-        );
-      }
-
-      if (draggingRef.current) {
-        selectedRef.current.forEach((s) => moveShape(s, dx, dy));
-      }
-
-      if (resizingRef.current) {
-        selectedRef.current.forEach((s) =>
-          resizeShape(s, resizeHandleRef.current, dx, dy),
-        );
+    const pointerUp = (e) => {
+      if (
+        activePointerIdRef.current !== null &&
+        e.pointerId !== activePointerIdRef.current
+      ) {
+        return;
       }
 
       if (drawingRef.current && currentShapeRef.current) {
-        const shape = currentShapeRef.current;
+        const camera = cameraRef.current;
+        const pointer = pointerToCanvas(e, canvas);
+        const pos = {
+          ...screenToWorld(pointer.x, pointer.y, camera),
+          pressure: pointer.pressure,
+          minDistance: 0.01 / camera.zoom,
+        };
+        const shapeDef = getShape(currentShapeRef.current.type);
 
-        const shapeDef = getShape(shape.type);
-
-        shapeDef?.update(shape, pos);
+        shapeDef?.update(currentShapeRef.current, pos);
       }
-    };
 
-    const pointerUp = () => {
       drawingRef.current = false;
       draggingRef.current = false;
       panningRef.current = false;
@@ -510,13 +640,27 @@ const Canvas = forwardRef(
       currentShapeRef.current = null;
       resizeHandleRef.current = null;
       selectionBoxRef.current = null;
+      selectionBaseRef.current = [];
+      transformHistorySavedRef.current = false;
 
       eraserTrailRef.current = [];
+      delete canvas.dataset.interaction;
+
+      if (
+        activePointerIdRef.current !== null &&
+        canvas.hasPointerCapture?.(activePointerIdRef.current)
+      ) {
+        canvas.releasePointerCapture?.(activePointerIdRef.current);
+      }
+
+      activePointerIdRef.current = null;
+      canvas.style.cursor = "";
     };
 
     const doubleClick = (e) => {
       const camera = cameraRef.current;
-      const pos = screenToWorld(e.clientX, e.clientY, camera);
+      const pointer = pointerToCanvas(e, canvas);
+      const pos = screenToWorld(pointer.x, pointer.y, camera);
       const shape = getShapeAt(pos.x, pos.y);
 
       if (shape?.type !== "text") return;
@@ -553,12 +697,13 @@ const Canvas = forwardRef(
         return;
       }
 
-      const before = screenToWorld(e.clientX, e.clientY, camera);
+      const pointer = pointerToCanvas(e, canvas);
+      const before = screenToWorld(pointer.x, pointer.y, camera);
 
       camera.zoom *= e.deltaY > 0 ? 0.98 : 1.02;
       camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, camera.zoom));
 
-      const after = screenToWorld(e.clientX, e.clientY, camera);
+      const after = screenToWorld(pointer.x, pointer.y, camera);
 
       zoomCamera(camera, before, after);
     };
@@ -567,6 +712,48 @@ const Canvas = forwardRef(
       const target = e.target;
 
       if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+        return;
+      }
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        spacePressedRef.current = true;
+        canvas.style.cursor = "grab";
+        return;
+      }
+
+      if (e.key === "Escape") {
+        selectedRef.current = [];
+        selectionBoxRef.current = null;
+        return;
+      }
+
+      if (
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key) &&
+        selectedRef.current.length
+      ) {
+        e.preventDefault();
+
+        if (!nudgeActiveRef.current) {
+          saveHistory();
+          nudgeActiveRef.current = true;
+        }
+
+        const distance = e.shiftKey ? 10 : 1;
+        const dx =
+          e.key === "ArrowLeft"
+            ? -distance
+            : e.key === "ArrowRight"
+              ? distance
+              : 0;
+        const dy =
+          e.key === "ArrowUp"
+            ? -distance
+            : e.key === "ArrowDown"
+              ? distance
+              : 0;
+
+        selectedRef.current.forEach((shape) => moveShape(shape, dx, dy));
         return;
       }
 
@@ -603,6 +790,12 @@ const Canvas = forwardRef(
         pasteClipboard();
       }
 
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        copySelected();
+        pasteClipboard();
+      }
+
       if (
         (e.ctrlKey || e.metaKey) &&
         e.shiftKey &&
@@ -630,12 +823,31 @@ const Canvas = forwardRef(
       }
     };
 
+    const keyUp = (e) => {
+      if (e.code === "Space") {
+        spacePressedRef.current = false;
+
+        if (!panningRef.current) {
+          canvas.style.cursor = "";
+        }
+      }
+
+      if (e.key.startsWith("Arrow")) {
+        nudgeActiveRef.current = false;
+      }
+    };
+
+    const preventContextMenu = (e) => e.preventDefault();
+
     canvas.addEventListener("pointerdown", pointerDown);
     canvas.addEventListener("dblclick", doubleClick);
+    canvas.addEventListener("contextmenu", preventContextMenu);
 
     window.addEventListener("pointermove", pointerMove);
     window.addEventListener("pointerup", pointerUp);
+    window.addEventListener("pointercancel", pointerUp);
     window.addEventListener("keydown", keyDown);
+    window.addEventListener("keyup", keyUp);
 
     canvas.addEventListener("wheel", wheel, {
       passive: false,
@@ -647,10 +859,13 @@ const Canvas = forwardRef(
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", pointerMove);
       window.removeEventListener("pointerup", pointerUp);
+      window.removeEventListener("pointercancel", pointerUp);
       window.removeEventListener("keydown", keyDown);
+      window.removeEventListener("keyup", keyUp);
 
       canvas.removeEventListener("pointerdown", pointerDown);
       canvas.removeEventListener("dblclick", doubleClick);
+      canvas.removeEventListener("contextmenu", preventContextMenu);
       canvas.removeEventListener("wheel", wheel);
     };
   }, [ref, setTool, bgColor, onZoomChange]);

@@ -80,6 +80,12 @@ input:focus-visible, textarea:focus-visible {
 .canvas[data-tool="pan"] {
   cursor: grab;
 }
+.canvas[data-interaction="grabbing"] {
+  cursor: grabbing !important;
+}
+.canvas[data-interaction="moving"] {
+  cursor: move !important;
+}
 .canvas[data-tool="eraser"] {
   cursor: cell;
 }

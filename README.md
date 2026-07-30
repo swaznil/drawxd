@@ -41,6 +41,7 @@ https://drawxd.vercel.app/
 - Keyboard shortcuts
 - Dark and Light theme
 - Customizable canvas background color
+- Custom Drawing color, Opacity and Stroke Width
 - Custom rendering engine
 
 ## How It Works

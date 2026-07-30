@@ -21,7 +21,11 @@ const shortcutsList = [
   { keys: "Ctrl Y", label: "Redo" },
   { keys: "Ctrl C", label: "Copy" },
   { keys: "Ctrl V", label: "Paste" },
+  { keys: "Ctrl D", label: "Duplicate" },
   { keys: "Ctrl A", label: "Select all" },
+  { keys: "Shift Click", label: "Add to selection" },
+  { keys: "Arrow", label: "Nudge selection" },
+  { keys: "Space Drag", label: "Pan canvas" },
   { keys: "Delete", label: "Delete selected" },
   { keys: "Ctrl Shift X", label: "Clear canvas" },
 ];
