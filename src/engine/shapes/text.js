@@ -1,4 +1,9 @@
 import { Type } from "lucide-react";
+import {
+  DEFAULT_FONT_SIZE,
+  DEFAULT_TEXT_HEIGHT,
+  DEFAULT_TEXT_WIDTH,
+} from "../constants";
 
 function wrapText(ctx, text, maxWidth) {
   const lines = [];
@@ -34,7 +39,13 @@ export default {
   label: "Text",
   icon: Type,
 
-  create(x, y, text = "", width = 260, height = 80) {
+  create(
+    x,
+    y,
+    text = "",
+    width = DEFAULT_TEXT_WIDTH,
+    height = DEFAULT_TEXT_HEIGHT,
+  ) {
     return {
       id: crypto.randomUUID(),
       type: "text",
@@ -43,7 +54,7 @@ export default {
       text,
       width,
       height,
-      fontSize: 28,
+      fontSize: DEFAULT_FONT_SIZE,
     };
   },
 

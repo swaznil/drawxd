@@ -1,5 +1,6 @@
 import { Pencil } from "lucide-react";
 import { distanceToLine } from "../shapeUtils";
+import { PENCIL_SAMPLE_DISTANCE } from "../constants";
 
 export default {
   type: "pencil",
@@ -18,7 +19,7 @@ export default {
     const last = shape.points[shape.points.length - 1];
     const dx = pos.x - last.x;
     const dy = pos.y - last.y;
-    const minDistance = pos.minDistance ?? 0.75;
+    const minDistance = pos.minDistance ?? PENCIL_SAMPLE_DISTANCE;
 
     if (dx * dx + dy * dy < minDistance * minDistance) {
       return;

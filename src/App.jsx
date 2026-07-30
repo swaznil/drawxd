@@ -14,8 +14,17 @@ import {
 import Toolbar from "./components/Toolbar";
 import Canvas from "./engine/Canvas";
 import { getCanvasInkColor } from "./engine/color";
-
-const bgPresets = ["#111111", "#0b1220", "#1a1a2e", "#fafafa", "#f1f0e8"];
+import {
+  CANVAS_BACKGROUND_PRESETS,
+  DEFAULT_CANVAS_BACKGROUND,
+  DEFAULT_DRAWING_OPACITY,
+  DEFAULT_EXPORT_HEIGHT,
+  DEFAULT_EXPORT_QUALITY,
+  DEFAULT_EXPORT_WIDTH,
+  DEFAULT_STROKE_WIDTH,
+  DEFAULT_THEME,
+  MAX_EXPORT_DIMENSION,
+} from "./engine/constants";
 
 const shortcutsList = [
   { keys: "1-6", label: "Switch tool" },
@@ -32,25 +41,22 @@ const shortcutsList = [
   { keys: "Ctrl Shift X", label: "Clear canvas" },
 ];
 
-const DEFAULT_THEME = "dark";
-const DEFAULT_BG = "#111111";
-
 export default function App() {
   const [tool, setTool] = useState("select");
   const [theme, setTheme] = useState(DEFAULT_THEME);
-  const [bgColor, setBgColor] = useState(DEFAULT_BG);
+  const [bgColor, setBgColor] = useState(DEFAULT_CANVAS_BACKGROUND);
   const [drawingColor, setDrawingColor] = useState(null);
-  const [strokeWidth, setStrokeWidth] = useState(2);
-  const [drawingOpacity, setDrawingOpacity] = useState(1);
+  const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE_WIDTH);
+  const [drawingOpacity, setDrawingOpacity] = useState(DEFAULT_DRAWING_OPACITY);
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [exportWidth, setExportWidth] = useState(1920);
-  const [exportHeight, setExportHeight] = useState(1080);
+  const [exportWidth, setExportWidth] = useState(DEFAULT_EXPORT_WIDTH);
+  const [exportHeight, setExportHeight] = useState(DEFAULT_EXPORT_HEIGHT);
   const [exportTransparent, setExportTransparent] = useState(false);
   const [exportFormat, setExportFormat] = useState("png");
-  const [exportQuality, setExportQuality] = useState(0.9);
+  const [exportQuality, setExportQuality] = useState(DEFAULT_EXPORT_QUALITY);
   const [zoomLabel, setZoomLabel] = useState("100%");
   const [localSaveStatus, setLocalSaveStatus] = useState("saved");
   const [notice, setNotice] = useState("");
@@ -74,10 +80,7 @@ export default function App() {
   const showNotice = (message) => {
     setNotice(message);
     window.clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = window.setTimeout(
-      () => setNotice(""),
-      3200,
-    );
+    noticeTimerRef.current = window.setTimeout(() => setNotice(""), 3200);
   };
 
   const handleExport = async () => {
@@ -123,7 +126,7 @@ export default function App() {
 
   const resetAppearance = () => {
     setTheme(DEFAULT_THEME);
-    setBgColor(DEFAULT_BG);
+    setBgColor(DEFAULT_CANVAS_BACKGROUND);
     setDrawingColor(null);
   };
 
@@ -223,18 +226,10 @@ export default function App() {
 
             <button
               className="shape-item"
-              onClick={() =>
-                setTheme(theme === "dark" ? "light" : "dark")
-              }
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
-              {theme === "dark" ? (
-                <Sun size={16} />
-              ) : (
-                <Moon size={16} />
-              )}
-              <span>
-                {theme === "dark" ? "Light mode" : "Dark mode"}
-              </span>
+              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+              <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
             </button>
 
             <div className="top-menu-label">
@@ -243,12 +238,10 @@ export default function App() {
             </div>
 
             <div className="bg-swatches">
-              {bgPresets.map((color) => (
+              {CANVAS_BACKGROUND_PRESETS.map((color) => (
                 <button
                   key={color}
-                  className={`bg-swatch ${
-                    bgColor === color ? "active" : ""
-                  }`}
+                  className={`bg-swatch ${bgColor === color ? "active" : ""}`}
                   style={{ background: color }}
                   onClick={() => setBgColor(color)}
                   title={color}
@@ -289,9 +282,7 @@ export default function App() {
 
       <div className="zoom-indicator">
         <span>{zoomLabel}</span>
-        <span
-          className={`local-save-status status-${localSaveStatus}`}
-        >
+        <span className={`local-save-status status-${localSaveStatus}`}>
           {localSaveStatus === "saving"
             ? "Saving..."
             : localSaveStatus === "error"
@@ -337,10 +328,7 @@ export default function App() {
       </div>
 
       {exportOpen && (
-        <div
-          className="modal-overlay"
-          onClick={() => setExportOpen(false)}
-        >
+        <div className="modal-overlay" onClick={() => setExportOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Export image</h3>
 
@@ -362,11 +350,9 @@ export default function App() {
                 <input
                   type="number"
                   min="1"
-                  max="8192"
+                  max={MAX_EXPORT_DIMENSION}
                   value={exportWidth}
-                  onChange={(e) =>
-                    setExportWidth(Number(e.target.value))
-                  }
+                  onChange={(e) => setExportWidth(Number(e.target.value))}
                 />
               </label>
 
@@ -375,11 +361,9 @@ export default function App() {
                 <input
                   type="number"
                   min="1"
-                  max="8192"
+                  max={MAX_EXPORT_DIMENSION}
                   value={exportHeight}
-                  onChange={(e) =>
-                    setExportHeight(Number(e.target.value))
-                  }
+                  onChange={(e) => setExportHeight(Number(e.target.value))}
                 />
               </label>
             </div>
@@ -389,9 +373,7 @@ export default function App() {
                 type="checkbox"
                 checked={exportTransparent}
                 disabled={exportFormat === "jpeg"}
-                onChange={(e) =>
-                  setExportTransparent(e.target.checked)
-                }
+                onChange={(e) => setExportTransparent(e.target.checked)}
               />
               Transparent background
               {exportFormat === "jpeg" && (
@@ -439,15 +421,12 @@ export default function App() {
       )}
 
       {aboutOpen && (
-        <div
-          className="modal-overlay"
-          onClick={() => setAboutOpen(false)}
-        >
+        <div className="modal-overlay" onClick={() => setAboutOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>drawxd</h3>
 
             <p className="about-text">
-              Experimenting on building a whiteboard with infinite canvas 
+              Experimenting on building a whiteboard with infinite canvas
             </p>
 
             <a
