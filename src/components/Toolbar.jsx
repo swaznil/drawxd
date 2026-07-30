@@ -1,62 +1,40 @@
 import { useEffect, useRef, useState } from "react";
-
 import {
-  MousePointer2,
-  Hand,
-  Pencil,
-  Minus,
-  Eraser,
-  Type,
-  Trash2,
-  Undo2,
-  Redo2,
+  Check,
   ChevronDown,
+  Eraser,
+  Hand,
+  Minus,
+  MousePointer2,
+  Palette,
+  Pencil,
+  Redo2,
+  Trash2,
+  Type,
+  Undo2,
 } from "lucide-react";
-
 import { getAllShapes } from "../engine/registry";
 
 const baseTools = [
-  {
-    key: "select",
-    icon: MousePointer2,
-    label: "Pointer",
-    shortcut: "1",
-  },
+  { key: "select", icon: MousePointer2, label: "Pointer", shortcut: "1" },
+  { key: "pan", icon: Hand, label: "Pan", shortcut: "2" },
+  { key: "pencil", icon: Pencil, label: "Pencil", shortcut: "3" },
+  { key: "line", icon: Minus, label: "Line", shortcut: "4" },
+  { key: "eraser", icon: Eraser, label: "Eraser", shortcut: "5" },
+  { key: "text", icon: Type, label: "Text", shortcut: "6" },
+];
 
-  {
-    key: "pan",
-    icon: Hand,
-    label: "Pan",
-    shortcut: "2",
-  },
-
-  {
-    key: "pencil",
-    icon: Pencil,
-    label: "Pencil",
-    shortcut: "3",
-  },
-
-  {
-    key: "line",
-    icon: Minus,
-    label: "Line",
-    shortcut: "4",
-  },
-
-  {
-    key: "eraser",
-    icon: Eraser,
-    label: "Eraser",
-    shortcut: "5",
-  },
-
-  {
-    key: "text",
-    icon: Type,
-    label: "Text",
-    shortcut: "6",
-  },
+const drawingColors = [
+  "#f5f5f4",
+  "#1c1917",
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#06b6d4",
+  "#3b82f6",
+  "#8b5cf6",
+  "#ec4899",
 ];
 
 export default function Toolbar({
@@ -66,27 +44,36 @@ export default function Toolbar({
   onUndo,
   onRedo,
   onOpen,
+  drawingColor,
+  drawingColorAuto,
+  onDrawingColorChange,
 }) {
-
-  const [open, setOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const shapeDropdownRef = useRef(null);
+  const colorPickerRef = useRef(null);
 
   const shapes = getAllShapes().filter(
     (shape) => !["pencil", "text", "line"].includes(shape.type),
   );
-
-  const mainShape = shapes.find((s) => s.type === tool) || shapes[0];
+  const mainShape = shapes.find((shape) => shape.type === tool) || shapes[0];
   const MainShapeIcon = mainShape?.icon;
 
   useEffect(() => {
     const closeOnOutsideClick = (event) => {
-      if (!dropdownRef.current?.contains(event.target)) {
-        setOpen(false);
+
+      if (!shapeDropdownRef.current?.contains(event.target)) {
+        setShapeMenuOpen(false);
       }
+      if (!colorPickerRef.current?.contains(event.target)) {
+        setColorMenuOpen(false);
+      }
+
     };
 
     window.addEventListener("pointerdown", closeOnOutsideClick);
-    return () => window.removeEventListener("pointerdown", closeOnOutsideClick);
+    return () =>
+      window.removeEventListener("pointerdown", closeOnOutsideClick);
   }, []);
 
   return (
@@ -109,30 +96,25 @@ export default function Toolbar({
           );
         })}
 
-        {/* SHAPE DROPDOWN */}
-
-        <div className="shape-dropdown" ref={dropdownRef}>
-
+        <div className="shape-dropdown" ref={shapeDropdownRef}>
           <button
             className={`tool-btn ${
-              shapes.some((s) => s.type === tool) ? "active" : ""
+              shapes.some((shape) => shape.type === tool) ? "active" : ""
             }`}
-
             onClick={() => {
-              if (!open) onOpen?.();
-              setOpen(!open);
+              if (!shapeMenuOpen) onOpen?.();
+              setShapeMenuOpen(!shapeMenuOpen);
+              setColorMenuOpen(false);
             }}
-
             title={`${mainShape?.label || "Shape"} tool`}
             aria-label="Choose a shape tool"
-            aria-expanded={open}
+            aria-expanded={shapeMenuOpen}
           >
             {MainShapeIcon && <MainShapeIcon size={18} />}
-
             <ChevronDown size={14} />
           </button>
 
-          {open && (
+          {shapeMenuOpen && (
             <div className="shape-menu">
               {shapes.map((shape) => {
                 const Icon = shape.icon;
@@ -141,17 +123,13 @@ export default function Toolbar({
                   <button
                     key={shape.type}
                     className="shape-item"
-
                     onClick={() => {
                       setTool(shape.type);
-
-                      setOpen(false);
+                      setShapeMenuOpen(false);
                     }}
                     aria-pressed={tool === shape.type}
                   >
-
                     <Icon size={16} />
-
                     <span>{shape.label}</span>
                   </button>
                 );
@@ -162,6 +140,84 @@ export default function Toolbar({
       </div>
 
       <div className="toolbar-divider" />
+
+      <div className="color-picker" ref={colorPickerRef}>
+        <button
+          className={`tool-btn color-trigger ${
+            colorMenuOpen ? "active" : ""
+          }`}
+          onClick={() => {
+            if (!colorMenuOpen) onOpen?.();
+            setColorMenuOpen(!colorMenuOpen);
+            setShapeMenuOpen(false);
+          }}
+          title="Drawing color"
+          aria-label="Choose drawing color"
+          aria-expanded={colorMenuOpen}
+        >
+          <Palette size={17} />
+          <span
+            className="color-trigger-dot"
+            style={{ backgroundColor: drawingColor }}
+          />
+        </button>
+
+        {colorMenuOpen && (
+          <div className="color-menu">
+            <div className="color-menu-heading">
+              <span>Drawing color</span>
+              <span>{drawingColor.toUpperCase()}</span>
+            </div>
+
+            <div className="drawing-color-grid">
+              {drawingColors.map((color) => {
+                const selected = !drawingColorAuto && drawingColor === color;
+
+                return (
+                  <button
+                    key={color}
+                    className={`drawing-color-swatch ${
+                      selected ? "active" : ""
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => onDrawingColorChange(color)}
+                    title={color}
+                    aria-label={`Use ${color} for drawing`}
+                    aria-pressed={selected}
+                  >
+                    {selected && <Check size={13} />}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="color-menu-actions">
+              <button
+                className={`auto-color-btn ${
+                  drawingColorAuto ? "active" : ""
+                }`}
+                onClick={() => onDrawingColorChange(null)}
+              >
+                <span className="auto-color-preview" />
+                <span>Auto contrast</span>
+                {drawingColorAuto && <Check size={14} />}
+              </button>
+
+              <label className="custom-drawing-color">
+                <span>Custom</span>
+                <input
+                  type="color"
+                  value={drawingColor}
+                  onChange={(event) =>
+                    onDrawingColorChange(event.target.value)
+                  }
+                  aria-label="Choose a custom drawing color"
+                />
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
 
       <button
         className="tool-btn"

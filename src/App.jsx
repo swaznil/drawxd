@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Toolbar from "./components/Toolbar";
 import Canvas from "./engine/Canvas";
+import { getCanvasInkColor } from "./engine/color";
 
 const bgPresets = ["#111111", "#0b1220", "#1a1a2e", "#fafafa", "#f1f0e8"];
 
@@ -32,6 +33,7 @@ export default function App() {
   const [tool, setTool] = useState("select");
   const [theme, setTheme] = useState(DEFAULT_THEME);
   const [bgColor, setBgColor] = useState(DEFAULT_BG);
+  const [drawingColor, setDrawingColor] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -68,6 +70,14 @@ export default function App() {
   const resetAppearance = () => {
     setTheme(DEFAULT_THEME);
     setBgColor(DEFAULT_BG);
+    setDrawingColor(null);
+  };
+
+  const activeDrawingColor = drawingColor || getCanvasInkColor(bgColor);
+
+  const changeDrawingColor = (color) => {
+    setDrawingColor(color);
+    canvasRef.current?.setSelectedColor(color);
   };
 
   return (
@@ -78,6 +88,9 @@ export default function App() {
         onClear={clearCanvas}
         onUndo={undo}
         onRedo={redo}
+        drawingColor={activeDrawingColor}
+        drawingColorAuto={drawingColor === null}
+        onDrawingColorChange={changeDrawingColor}
       />
 
       <div className="top-menu">
@@ -183,6 +196,7 @@ export default function App() {
         tool={tool}
         setTool={setTool}
         bgColor={bgColor}
+        drawingColor={drawingColor}
         onZoomChange={setZoomLabel}
       />
 

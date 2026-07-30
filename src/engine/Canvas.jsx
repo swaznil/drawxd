@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import { createCamera, panCamera, zoomCamera } from "./camera";
+import { getCanvasInkColor } from "./color";
 import { drawGrid } from "./grid";
 import { drawShapes } from "./renderer";
 import { screenToWorld } from "./utils";
@@ -22,17 +23,6 @@ import {
   moveShape,
   resizeShape,
 } from "./shapeUtils";
-
-function getCanvasInkColor(bgColor) {
-  const hex = bgColor.replace("#", "");
-  const value = Number.parseInt(hex, 16);
-  const red = (value >> 16) & 255;
-  const green = (value >> 8) & 255;
-  const blue = value & 255;
-  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-
-  return luminance > 0.55 ? "#1c1917" : "#f5f5f4";
-}
 
 function exportShapesAsPng(shapes, width, height, bgColor, defaultStroke) {
   const bounds = getSelectionBounds(shapes);
@@ -89,11 +79,13 @@ function exportShapesAsPng(shapes, width, height, bgColor, defaultStroke) {
   });
 }
 
-const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
+const Canvas = forwardRef(
+  ({ tool, setTool, bgColor, drawingColor, onZoomChange }, ref) => {
   const canvasRef = useRef(null);
 
   const cameraRef = useRef(createCamera());
   const toolRef = useRef(tool);
+  const drawingColorRef = useRef(drawingColor);
 
   const shapesRef = useRef([]);
   const selectedRef = useRef([]);
@@ -122,6 +114,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
   const textInputRef = useRef(null);
 
   toolRef.current = tool;
+  drawingColorRef.current = drawingColor;
 
   const saveHistory = () => {
     historyRef.current.push(structuredClone(shapesRef.current));
@@ -230,6 +223,20 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
       shapesRef.current = redoRef.current.pop();
 
       selectedRef.current = [];
+    },
+
+    setSelectedColor(color) {
+      if (!selectedRef.current.length) return;
+
+      saveHistory();
+
+      selectedRef.current.forEach((shape) => {
+        shape.stroke = color;
+
+        if (shape.type === "text") {
+          shape.fill = color;
+        }
+      });
     },
 
     async exportPng(width, height, transparent) {
@@ -400,6 +407,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
       saveHistory();
 
       const shape = shapeDef.create(pos.x, pos.y);
+      shape.stroke = drawingColorRef.current;
 
       shapesRef.current.push(shape);
 
@@ -607,6 +615,8 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
             top: `${textEditor.screenY}px`,
             width: "260px",
             height: "120px",
+            color: drawingColor || getCanvasInkColor(bgColor),
+            caretColor: drawingColor || getCanvasInkColor(bgColor),
           }}
           onPointerDown={(e) => {
             e.stopPropagation();
@@ -635,6 +645,8 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
                 e.target.offsetWidth,
                 e.target.offsetHeight,
               );
+              shape.stroke = drawingColorRef.current;
+              shape.fill = drawingColorRef.current;
 
               shapesRef.current.push(shape);
             }
@@ -645,6 +657,7 @@ const Canvas = forwardRef(({ tool, setTool, bgColor, onZoomChange }, ref) => {
       ) : null}
     </>
   );
-});
+  },
+);
 
 export default Canvas;
