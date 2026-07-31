@@ -10,9 +10,8 @@ DrawxD is a whiteboard canvas inspired by Excalidraw and tldraw. It is an experi
 
 When trying to teach somebody a concept online, I normally sketch ideas to help them understand visually, For that I needed an whitebaord app or a website. There werent much good free options and even the good ones had poor performance. Sometimes I just wanted to draw with stylus without internet, but I couldn't find any with infinite canvas, good performance and offline support. 
 
-I created originally created this for my own personal use but later decided to host it online and use it as a hackclub, horizons project. 
+I created originally created this for my own personal use but later decided to host it online and use it as a hackclub, horizons project. I also used this as an opportunity to learn React, as I had less exposure to it.
 
-I also use this as an opportunity to learn React, as I had less exposure to it.
 ---
 
 ### Live Demo
@@ -54,56 +53,31 @@ The engine keeps React canvas state and rendering in `Canvas.jsx`, pointer and k
 ## Tech Stack
 
 - React
-- Vite
-- HTML5 Canvas API
+- HTML
 - JavaScript
 - CSS
-- Lucide React Icons
 
 ---
 
 ## Project Structure
 
 ```text
-drawxd
-├── README.md
-├── assets
-│   └── screenshot01.png
-├── index.html
-├── package-lock.json
-├── package.json
-├── public
-├── src
+drawxd/
+├── assets/
+├── src/
+│   ├── components/
+│   ├── engine/
+│   │   └── shapes/
 │   ├── App.jsx
-│   ├── components
-│   │   └── Toolbar.jsx
-│   ├── engine
-│   │   ├── Canvas.jsx
-│   │   ├── camera.js
-│   │   ├── canvasEvents.js
-│   │   ├── color.js
-│   │   ├── constants.js
-│   │   ├── grid.js
-│   │   ├── project.js
-│   │   ├── registry.js
-│   │   ├── renderer.js
-│   │   ├── shapeUtils.js
-│   │   ├── shapes
-│   │   │   ├── arrow.js
-│   │   │   ├── diamond.js
-│   │   │   ├── ellipse.js
-│   │   │   ├── heart.js
-│   │   │   ├── hexagon.js
-│   │   │   ├── index.js
-│   │   │   ├── line.js
-│   │   │   ├── pencil.js
-│   │   │   ├── rect.js
-│   │   │   ├── star.js
-│   │   │   └── text.js
-│   │   └── utils.js
 │   ├── main.jsx
 │   └── styles.css
-└── vite.config.js
+├── index.html
+├── package.json
+├── .gitignore
+├── .oxlintrc.json
+├── package-lock.json
+├── vite.config.js
+└── README.md
 ```
 
 ---
